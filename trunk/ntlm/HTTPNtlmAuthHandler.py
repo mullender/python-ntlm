@@ -100,14 +100,9 @@ class ProxyNtlmAuthHandler(AbstractNtlmAuthHandler, urllib2.BaseHandler):
 
 
 if __name__ == "__main__":
-    #~ url = 'http://trac2.assembla.com/joma/report/1?format=rss'
-    url = 'http://compass.oce.net/'
-    #~ url = 'http://compass/CompassCMS/NetherlandsHQ/ResearchDevelopment/News/'
-    url = 'http://corpcom.blog.oce.net/syndication.axd'
-    #~ url = 'http://wikird/'
-    #~ url = 'http://redweb/'
-    user = 'OCEVENLO\mmu'
-    password = 'data4mmu'
+    url = "http://ntlmprotectedserver/securedfile.html"
+    user = 'DOMAIN\User'
+    password = 'Password'
 
     passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
     passman.add_password(None, url, user , password)
