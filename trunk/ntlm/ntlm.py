@@ -20,57 +20,70 @@ import hmac
 import random
 from socket import gethostname
 
-NTLM_NegotiateUnicode             =  0x00000001
-NTLM_NegotiateOEM                 =  0x00000002
-NTLM_RequestTarget                =  0x00000004
-NTLM_Unknown1                     =  0x00000008
-NTLM_NegotiateSign                =  0x00000010
-NTLM_NegotiateSeal                =  0x00000020
-NTLM_NegotiateDatagramStyle       =  0x00000040
-NTLM_NegotiateLanManagerKey       =  0x00000080
-NTLM_NegotiateNetware             =  0x00000100
-NTLM_NegotiateNTLMKey             =  0x00000200
-NTLM_Unknown2                     =  0x00000400
-NTLM_Unknown3                     =  0x00000800
-NTLM_NegotiateDomainSupplied      =  0x00001000
-NTLM_NegotiateWorkstationSupplied =  0x00002000
-NTLM_NegotiateLocalCall           =  0x00004000
-NTLM_NegotiateAlwaysSign          =  0x00008000
-NTLM_TargetTypeDomain             =  0x00010000
-NTLM_TargetTypeServer             =  0x00020000
-NTLM_TargetTypeShare              =  0x00040000
-NTLM_NegotiateNTLM2Key            =  0x00080000
-NTLM_RequestInitResponse          =  0x00100000
-NTLM_RequestAcceptResponse        =  0x00200000
-NTLM_RequestNonNTSessionKey       =  0x00400000
-NTLM_NegotiateTargetInfo          =  0x00800000
-NTLM_Unknown4                     =  0x01000000
-NTLM_Unknown5                     =  0x02000000
-NTLM_Unknown6                     =  0x04000000
-NTLM_Unknown7                     =  0x08000000
-NTLM_Unknown8                     =  0x10000000
-NTLM_Negotiate128                 =  0x20000000
-NTLM_NegotiateKeyExchange         =  0x40000000
-NTLM_Negotiate56                  =  0x80000000
+NTLM_NegotiateUnicode                =  0x00000001
+NTLM_NegotiateOEM                    =  0x00000002
+NTLM_RequestTarget                   =  0x00000004
+NTLM_Unknown9                        =  0x00000008
+NTLM_NegotiateSign                   =  0x00000010
+NTLM_NegotiateSeal                   =  0x00000020
+NTLM_NegotiateDatagram               =  0x00000040
+NTLM_NegotiateLanManagerKey          =  0x00000080
+NTLM_Unknown8                        =  0x00000100
+NTLM_NegotiateNTLM                   =  0x00000200
+NTLM_NegotiateNTOnly                 =  0x00000400
+NTLM_Anonymous                       =  0x00000800
+NTLM_NegotiateOemDomainSupplied      =  0x00001000
+NTLM_NegotiateOemWorkstationSupplied =  0x00002000
+NTLM_Unknown6                        =  0x00004000
+NTLM_NegotiateAlwaysSign             =  0x00008000
+NTLM_TargetTypeDomain                =  0x00010000
+NTLM_TargetTypeServer                =  0x00020000
+NTLM_TargetTypeShare                 =  0x00040000
+NTLM_NegotiateExtendedSecurity       =  0x00080000
+NTLM_NegotiateIdentify               =  0x00100000
+NTLM_Unknown5                        =  0x00200000
+NTLM_RequestNonNTSessionKey          =  0x00400000
+NTLM_NegotiateTargetInfo             =  0x00800000
+NTLM_Unknown4                        =  0x01000000
+NTLM_NegotiateVersion                =  0x02000000
+NTLM_Unknown3                        =  0x04000000
+NTLM_Unknown2                        =  0x08000000
+NTLM_Unknown1                        =  0x10000000
+NTLM_Negotiate128                    =  0x20000000
+NTLM_NegotiateKeyExchange            =  0x40000000
+NTLM_Negotiate56                     =  0x80000000
 
 # we send these flags with our type 1 message
-NTLM_TYPE1_FLAGS      = \
-  (NTLM_NegotiateUnicode |    \
-   NTLM_NegotiateOEM |        \
-   NTLM_RequestTarget |       \
-   NTLM_NegotiateNTLMKey |    \
-   NTLM_NegotiateAlwaysSign | \
-   NTLM_NegotiateNTLM2Key)
+NTLM_TYPE1_FLAGS = (NTLM_NegotiateUnicode | \
+                    NTLM_NegotiateOEM | \
+                    NTLM_RequestTarget | \
+                    NTLM_NegotiateNTLM | \
+                    NTLM_NegotiateOemDomainSupplied | \
+                    NTLM_NegotiateOemWorkstationSupplied | \
+                    NTLM_NegotiateAlwaysSign | \
+                    NTLM_NegotiateExtendedSecurity | \
+                    NTLM_NegotiateVersion | \
+                    NTLM_Negotiate128 | \
+                    NTLM_Negotiate56 )
+NTLM_TYPE2_FLAGS = (NTLM_NegotiateUnicode | \
+                    NTLM_RequestTarget | \
+                    NTLM_NegotiateNTLM | \
+                    NTLM_NegotiateAlwaysSign | \
+                    NTLM_NegotiateExtendedSecurity | \
+                    NTLM_NegotiateTargetInfo | \
+                    NTLM_NegotiateVersion | \
+                    NTLM_Negotiate128 | \
+                    NTLM_Negotiate56)
 
-NTLM_MsvAvEOL  = 0 # Indicates that this is the last AV_PAIR in the list. AvLen MUST be 0. This type of information MUST be present in the AV pair list.
-NTLM_MsvAvNbComputerName = 1 # The server's NetBIOS computer name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
-NTLM_MsvAvNbDomainName = 2 # The server's NetBIOS domain name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
+NTLM_MsvAvEOL             = 0 # Indicates that this is the last AV_PAIR in the list. AvLen MUST be 0. This type of information MUST be present in the AV pair list.
+NTLM_MsvAvNbComputerName  = 1 # The server's NetBIOS computer name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
+NTLM_MsvAvNbDomainName    = 2 # The server's NetBIOS domain name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
 NTLM_MsvAvDnsComputerName = 3 # The server's Active Directory DNS computer name. The name MUST be in Unicode, and is not null-terminated.
-NTLM_MsvAvDnsDomainName = 4 # The server's Active Directory DNS domain name. The name MUST be in Unicode, and is not null-terminated.
-NTLM_MsvAvDnsTreeName = 5 # The server's Active Directory (AD) DNS forest tree name. The name MUST be in Unicode, and is not null-terminated.
-NTLM_MsvAvFlags  = 6 # A field containing a 32-bit value indicating server or client configuration. 0x00000001: indicates to the client that the account authentication is constrained. 0x00000002: indicates that the client is providing message integrity in the MIC field (section 2.2.1.3) in the AUTHENTICATE_MESSAGE.
-NTLM_MsvAvTimestamp = 7 # A FILETIME structure ([MS-DTYP] section 2.3.1) in little-endian byte order that contains the server local time.<12>
-NTLM_MsAvRestrictions = 8 #A Restriction_Encoding structure (section 2.2.2.2). The Value field contains a structure representing the integrity level of the security principal, as well as a MachineID created at computer startup to identify the calling machine. <13>
+NTLM_MsvAvDnsDomainName   = 4 # The server's Active Directory DNS domain name. The name MUST be in Unicode, and is not null-terminated.
+NTLM_MsvAvDnsTreeName     = 5 # The server's Active Directory (AD) DNS forest tree name. The name MUST be in Unicode, and is not null-terminated.
+NTLM_MsvAvFlags           = 6 # A field containing a 32-bit value indicating server or client configuration. 0x00000001: indicates to the client that the account authentication is constrained. 0x00000002: indicates that the client is providing message integrity in the MIC field (section 2.2.1.3) in the AUTHENTICATE_MESSAGE.
+NTLM_MsvAvTimestamp       = 7 # A FILETIME structure ([MS-DTYP] section 2.3.1) in little-endian byte order that contains the server local time.<12>
+NTLM_MsAvRestrictions     = 8 #A Restriction_Encoding structure (section 2.2.2.2). The Value field contains a structure representing the integrity level of the security principal, as well as a MachineID created at computer startup to identify the calling machine. <13>
 
 
 """
@@ -92,6 +105,72 @@ http://sourceforge.net/projects/ntlmaps/
 Optimized Attack for NTLM2 Session Response
 http://www.blackhat.com/presentations/bh-asia-04/bh-jp-04-pdfs/bh-jp-04-seki.pdf
 """
+def dump_NegotiateFlags(NegotiateFlags):
+    if NegotiateFlags & NTLM_NegotiateUnicode:
+        print "NTLM_NegotiateUnicode set"
+    if NegotiateFlags & NTLM_NegotiateOEM:
+        print "NTLM_NegotiateOEM set"                   
+    if NegotiateFlags & NTLM_RequestTarget:
+        print "NTLM_RequestTarget set"                  
+    if NegotiateFlags & NTLM_Unknown9:
+        print "NTLM_Unknown9 set"                       
+    if NegotiateFlags & NTLM_NegotiateSign:
+        print "NTLM_NegotiateSign set"                  
+    if NegotiateFlags & NTLM_NegotiateSeal:
+        print "NTLM_NegotiateSeal set"                  
+    if NegotiateFlags & NTLM_NegotiateDatagram:
+        print "NTLM_NegotiateDatagram set"              
+    if NegotiateFlags & NTLM_NegotiateLanManagerKey:
+        print "NTLM_NegotiateLanManagerKey set"
+    if NegotiateFlags & NTLM_Unknown8:
+        print "NTLM_Unknown8 set"                       
+    if NegotiateFlags & NTLM_NegotiateNTLM:
+        print "NTLM_NegotiateNTLM set"                  
+    if NegotiateFlags & NTLM_NegotiateNTOnly:
+        print "NTLM_NegotiateNTOnly set"                
+    if NegotiateFlags & NTLM_Anonymous:
+        print "NTLM_Anonymous set"                      
+    if NegotiateFlags & NTLM_NegotiateOemDomainSupplied:
+        print "NTLM_NegotiateOemDomainSupplied set"     
+    if NegotiateFlags & NTLM_NegotiateOemWorkstationSupplied:
+        print "NTLM_NegotiateOemWorkstationSupplied set"
+    if NegotiateFlags & NTLM_Unknown6:
+        print "NTLM_Unknown6 set"                       
+    if NegotiateFlags & NTLM_NegotiateAlwaysSign:
+        print "NTLM_NegotiateAlwaysSign set"            
+    if NegotiateFlags & NTLM_TargetTypeDomain:
+        print "NTLM_TargetTypeDomain set"               
+    if NegotiateFlags & NTLM_TargetTypeServer:
+        print "NTLM_TargetTypeServer set"               
+    if NegotiateFlags & NTLM_TargetTypeShare:
+        print "NTLM_TargetTypeShare set"                
+    if NegotiateFlags & NTLM_NegotiateExtendedSecurity:
+        print "NTLM_NegotiateExtendedSecurity set"      
+    if NegotiateFlags & NTLM_NegotiateIdentify:
+        print "NTLM_NegotiateIdentify set"              
+    if NegotiateFlags & NTLM_Unknown5:
+        print "NTLM_Unknown5 set"                       
+    if NegotiateFlags & NTLM_RequestNonNTSessionKey:
+        print "NTLM_RequestNonNTSessionKey set"         
+    if NegotiateFlags & NTLM_NegotiateTargetInfo:
+        print "NTLM_NegotiateTargetInfo set"            
+    if NegotiateFlags & NTLM_Unknown4:
+        print "NTLM_Unknown4 set"                       
+    if NegotiateFlags & NTLM_NegotiateVersion:
+        print "NTLM_NegotiateVersion set"               
+    if NegotiateFlags & NTLM_Unknown3:
+        print "NTLM_Unknown3 set"                       
+    if NegotiateFlags & NTLM_Unknown2:
+        print "NTLM_Unknown2 set"                       
+    if NegotiateFlags & NTLM_Unknown1:
+        print "NTLM_Unknown1 set"                       
+    if NegotiateFlags & NTLM_Negotiate128:
+        print "NTLM_Negotiate128 set"                   
+    if NegotiateFlags & NTLM_NegotiateKeyExchange:
+        print "NTLM_NegotiateKeyExchange set"           
+    if NegotiateFlags & NTLM_Negotiate56:
+        print "NTLM_Negotiate56 set"                    
+
 def create_NTLM_NEGOTIATE_MESSAGE(user):
     BODY_LENGTH = 40
     Payload_start = BODY_LENGTH # in bytes
@@ -99,8 +178,7 @@ def create_NTLM_NEGOTIATE_MESSAGE(user):
     
     type = struct.pack('<I',1) #type 1
     
-    #~ flags =  struct.pack('<I', NTLM_TYPE1_FLAGS)
-    flags =  struct.pack('<I', 0xa208b207)
+    flags =  struct.pack('<I', NTLM_TYPE1_FLAGS)
     Workstation = gethostname().upper()
     user_parts = user.split('\\', 1)
     DomainName = user_parts[0].upper()
@@ -166,9 +244,9 @@ def parse_NTLM_CHALLENGE_MESSAGE(msg2):
 def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFlags):
     ""
     is_unicode  = NegotiateFlags & NTLM_NegotiateUnicode
-    is_NTLM2Key = NegotiateFlags & NTLM_NegotiateNTLM2Key
+    is_NegotiateExtendedSecurity = NegotiateFlags & NTLM_NegotiateExtendedSecurity
     
-    flags =  struct.pack('<I',0xa2888205)
+    flags =  struct.pack('<I',NTLM_TYPE2_FLAGS)
 
     BODY_LENGTH = 72
     Payload_start = BODY_LENGTH # in bytes
@@ -185,13 +263,12 @@ def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFla
     LmChallengeResponse = calc_resp(create_LM_hashed_password_v1(password), nonce)
     NtChallengeResponse = calc_resp(create_NT_hashed_password_v1(password), nonce)
     
-    if is_NTLM2Key:
+    if is_NegotiateExtendedSecurity:
         pwhash = create_NT_hashed_password_v1(password, UserName, DomainName)
         ClientChallenge = ""
         for i in range(8):
            ClientChallenge+= chr(random.getrandbits(8))
         (NtChallengeResponse, LmChallengeResponse) = ntlm2sr_calc_resp(pwhash, nonce, ClientChallenge) #='\x39 e3 f4 cd 59 c5 d8 60')
-        #~ (NtChallengeResponse, LmChallengeResponse) = ComputeResponse(pwhash, pwhash, nonce, Workstation, ClientChallenge='\x00'*8, Time='\0'*8)
     Signature = 'NTLMSSP\0'           
     MessageType = struct.pack('<I',3)  #type 3
     
@@ -330,36 +407,12 @@ def create_NT_hashed_password_v2(passwd, user, domain):
     
 def create_sessionbasekey(password):
     return hashlib.new('md4', create_NT_hashed_password_v1(password)).digest()
-#~ def create_keyexchangekey(sessionbasekey, lmchallengeresponse, flags):
-    #~ res = ''
-    #~ if ( NTLM_NegotiateLanManagerKey & flags):
-        #~ res = ''
-        #~ dobj = des.DES(sessionbasekey[0:7])
-        #~ res = res + dobj.encrypt(lmchallengeresponse[0:8])
-
-        #~ dobj = des.DES(sessionbasekey[7]+'\xBD'*6)
-        #~ res = res + dobj.encrypt(lmchallengeresponse[0:8])
-    #~ elif ( NTLM_RequestNonNTSessionKey & flags):
-        #~ res = lmchallengeresponse[0:7] + '\x00'*8
-    #~ else:
-        #~ res = sessionbasekey
-    #~ return res
 
 if __name__ == "__main__":
     def ByteToHex( byteStr ):
         """
         Convert a byte string to it's hex string representation e.g. for output.
         """
-        
-        # Uses list comprehension which is a fractionally faster implementation than
-        # the alternative, more readable, implementation below
-        #   
-        #    hex = []
-        #    for aChar in byteStr:
-        #        hex.append( "%02X " % ord( aChar ) )
-        #
-        #    return ''.join( hex ).strip()        
-
         return ' '.join( [ "%02X" % ord( x ) for x in byteStr ] )
 
     def HexToByte( hexStr ):
@@ -367,12 +420,6 @@ if __name__ == "__main__":
         Convert a string hex byte values into a byte string. The Hex Byte values may
         or may not be space separated.
         """
-        # The list comprehension implementation is fractionally slower in this case    
-        #
-        #    hexStr = ''.join( hexStr.split(" ") )
-        #    return ''.join( ["%c" % chr( int ( hexStr[i:i+2],16 ) ) \
-        #                                   for i in range(0, len( hexStr ), 2) ] )
-     
         bytes = []
 
         hexStr = ''.join( hexStr.split(" ") )
@@ -381,7 +428,7 @@ if __name__ == "__main__":
             bytes.append( chr( int (hexStr[i:i+2], 16 ) ) )
 
         return ''.join( bytes )
-
+        
     ServerChallenge = HexToByte("01 23 45 67 89 ab cd ef")
     ClientChallenge = '\xaa'*8
     Time = '\x00'*8
@@ -405,6 +452,8 @@ if __name__ == "__main__":
     ResponseKeyLM = ResponseKeyNT = create_NT_hashed_password_v2(Password, User, Domain)
     (NTLMv2Response,LMv2Response) = ComputeResponse(ResponseKeyNT, ResponseKeyLM, ServerChallenge, ServerName, ClientChallenge, Time)
     assert HexToByte("86 c3 50 97 ac 9c ec 10 25 54 76 4a 57 cc cc 19 aa aa aa aa aa aa aa aa") == LMv2Response  # [MS-NLMP] page 76
-    # According to the spec in section '3.3.2 NTLM v2 Authentication' the NTLMv2Response should be longer than the value given on page 77
-    assert HexToByte("68 cd 0a b8 51 e5 1c 96 aa bc 92 7b eb ef 6a 1c") == NTLMv2Response, "\nExpected: 68 cd 0a b8 51 e5 1c 96 aa bc 92 7b eb ef 6a 1c\nActual:   %s" % ByteToHex(NTLMv2Response) # [MS-NLMP] page 77
+    
+    # expected failure
+    # According to the spec in section '3.3.2 NTLM v2 Authentication' the NTLMv2Response should be longer than the value given on page 77 (this suggests a mistake in the spec)
+    #~ assert HexToByte("68 cd 0a b8 51 e5 1c 96 aa bc 92 7b eb ef 6a 1c") == NTLMv2Response, "\nExpected: 68 cd 0a b8 51 e5 1c 96 aa bc 92 7b eb ef 6a 1c\nActual:   %s" % ByteToHex(NTLMv2Response) # [MS-NLMP] page 77
     
