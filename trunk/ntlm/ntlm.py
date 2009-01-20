@@ -179,9 +179,9 @@ def create_NTLM_NEGOTIATE_MESSAGE(user):
     type = struct.pack('<I',1) #type 1
     
     flags =  struct.pack('<I', NTLM_TYPE1_FLAGS)
-    Workstation = gethostname().upper()
+    Workstation = gethostname().upper().encode('ascii')
     user_parts = user.split('\\', 1)
-    DomainName = user_parts[0].upper()
+    DomainName = user_parts[0].upper().encode('ascii')
     EncryptedRandomSessionKey = ""
     
     
