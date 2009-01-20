@@ -366,9 +366,9 @@ def ComputeResponse(ResponseKeyNT, ResponseKeyLM, ServerChallenge, ServerName, C
     return (NtChallengeResponse, LmChallengeResponse)
 
 def ntlm2sr_calc_resp(ResponseKeyNT, ServerChallenge, ClientChallenge='\xaa'*8):
-    import md5
+    import hashlib
     LmChallengeResponse = ClientChallenge + '\0'*16
-    sess = md5.new(ServerChallenge+ClientChallenge).digest()
+    sess = hashlib.md5(ServerChallenge+ClientChallenge).digest()
     NtChallengeResponse = calc_resp(ResponseKeyNT, sess[0:8])
     return (NtChallengeResponse, LmChallengeResponse)
 
