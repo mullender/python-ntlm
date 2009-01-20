@@ -13,7 +13,7 @@
 
 import urllib2
 import httplib, socket
-
+from urllib import addinfourl
 import ntlm
 
 class AbstractNtlmAuthHandler:
@@ -73,7 +73,11 @@ class AbstractNtlmAuthHandler:
             try:
                 h.request(req.get_method(), req.get_selector(), req.data, headers)
                 # none of the configured handlers are triggered, for example redirect-responses are not handled!
-                return h.getresponse()
+                response = h.getresponse()
+                def notimplemented():
+                    raise NotImplementedError
+                response.readline = notimplemented
+                return addinfourl(response, response.msg, req.get_full_url())
             except socket.error, err:
                 raise URLError(err)
         else:
