@@ -101,7 +101,7 @@ class ProxyNtlmAuthHandler(AbstractNtlmAuthHandler, urllib2.BaseHandler):
 
 if __name__ == "__main__":
     url = "http://ntlmprotectedserver/securedfile.html"
-    user = 'DOMAIN\User'
+    user = u'DOMAIN\\User'
     password = 'Password'
 
     passman = urllib2.HTTPPasswordMgrWithDefaultRealm()
