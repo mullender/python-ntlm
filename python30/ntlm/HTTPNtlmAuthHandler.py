@@ -47,7 +47,7 @@ class AbstractNtlmAuthHandler:
             
             host = req.get_host()
             if not host:
-                raise URLError('no host given')
+                raise urllib.request.URLError('no host given')
             h = None
             if req.get_full_url().startswith('https://'):
                 h = http.client.HTTPSConnection(host) # will parse host:port
@@ -85,7 +85,7 @@ class AbstractNtlmAuthHandler:
                 response.readline = notimplemented
                 return addinfourl(response, response.msg, req.get_full_url())
             except socket.error as err:
-                raise URLError(err)
+                raise urllib.request.URLError(err)
         else:  
             return None
 
@@ -113,7 +113,6 @@ if __name__ == "__main__":
     url = "http://ntlmprotectedserver/securedfile.html"
     user = "DOMAIN\\User"
     password = "Password"
-
     passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
     passman.add_password(None, url, user , password)
     auth_basic = urllib.request.HTTPBasicAuthHandler(passman)

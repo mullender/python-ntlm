@@ -44,7 +44,7 @@ class AbstractNtlmAuthHandler:
             
             host = req.get_host()
             if not host:
-                raise URLError('no host given')
+                raise urllib2.URLError('no host given')
             h = None
             if req.get_full_url().startswith('https://'):
                 h = httplib.HTTPSConnection(host) # will parse host:port
@@ -79,7 +79,7 @@ class AbstractNtlmAuthHandler:
                 response.readline = notimplemented
                 return addinfourl(response, response.msg, req.get_full_url())
             except socket.error, err:
-                raise URLError(err)
+                raise urllib2.URLError(err)
         else:
             return None
 
