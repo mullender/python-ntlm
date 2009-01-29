@@ -14,7 +14,10 @@
 import struct
 import base64
 import string
-import des
+try:
+    from . import des
+except ValueError:
+    import des
 import hashlib
 import hmac
 import random
