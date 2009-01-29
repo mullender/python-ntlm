@@ -1,0 +1,10 @@
+#summary Plans for client and server support
+#labels Phase-Design,Phase-Requirements
+
+= Introduction =
+
+The current python-ntlm trunk code supports writing clients connecting to a server.
+
+Issue 4 is about being able to write server-side code that will authenticate clients.
+
+Work has begun on this in the clientserver branch.
