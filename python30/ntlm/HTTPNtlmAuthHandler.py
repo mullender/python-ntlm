@@ -14,7 +14,10 @@
 import urllib.request, urllib.error
 import http.client, socket
 from urllib.response import addinfourl
-import ntlm
+try:
+    from . import ntlm
+except ValueError:
+    import ntlm
 
 class AbstractNtlmAuthHandler:
     

@@ -14,8 +14,10 @@
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library.  If not, see <http://www.gnu.org/licenses/> or <http://www.gnu.org/licenses/lgpl.txt>.
 
-from U32 import U32
-
+try:
+    from .U32 import U32
+except ValueError:
+    from U32 import U32
 # --NON ASCII COMMENT ELIDED--
 #typedef unsigned char des_cblock[8];
 #define HDRSIZE 4
@@ -118,7 +120,10 @@ def l2cn(l1, l2, c, n):
 # array of data
 # static unsigned long des_SPtrans[8][64]={
 # static unsigned long des_skb[8][64]={
-from des_data import des_SPtrans, des_skb
+try:
+    from .des_data import des_SPtrans, des_skb
+except ValueError:
+    from des_data import des_SPtrans, des_skb
 
 def D_ENCRYPT(tup, u, t, s):
     L, R, S = tup
