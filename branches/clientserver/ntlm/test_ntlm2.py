@@ -1,6 +1,5 @@
 """Tests for the NTLM module"""
 
-import ntlm
 import ntlm2
 from ntlm2 import NTLM_FLAGS
 import ntlmhandler
@@ -34,21 +33,6 @@ def HexToByte( hexStr ):
 
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
-
-    @classmethod
-    def setup_class(cls):
-        """Sets up the methods for testing"""
-        cls.old_gethostname = ntlm.gethostname
-        cls.expectedhostname = "LightCity"
-        ntlm.gethostname = cls.gethostname
-
-    @classmethod
-    def teardown_class(cls):
-        ntlm.gethostname = cls.old_gethostname
-
-    @classmethod
-    def gethostname(cls):
-        return cls.expectedhostname
 
     def test_hash_functions(self):
         """Test underlying hash functions"""
