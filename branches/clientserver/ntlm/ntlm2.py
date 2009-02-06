@@ -255,23 +255,30 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
         current_fields[name] = ""
         self.set_string_fields(current_fields)
 
-    def set_string_fields(self, field_values):
+    def set_string_fields(self, field_values, optional_length_change=0):
         """regenerates the payload with the field_values given"""
         MessageFields = self.MessageFields
         HeaderSize = ctypes.sizeof(self.Header) + ctypes.sizeof(MessageFields)
         optional_length = self.get_optional_length()
         new_payload_size = optional_length + sum(len(value or "") for value in field_values.values())
         new_payload = (ctypes.c_uint8*new_payload_size)()
-        new_payload[0:optional_length] = self.payload[0:optional_length]
-        current_pos = optional_length
+        source_pos = copy_pos = optional_length
+
+        #Check whether the NTLMSSP_NEGOTIATE_VERSION flag has been changed
+        if optional_length_change == 0:
+            new_payload[0:optional_length] = self.payload[0:optional_length]
+        else:
+            source_pos = source_pos - optional_length_change
+
         for field_name, value in field_values.items():
             value = value or ""
             FieldHeader = getattr(MessageFields, field_name)
             FieldHeader.Len = FieldHeader.MaxLen = field_len = len(value)
-            FieldHeader.BufferOffset = HeaderSize + current_pos
-            new_pos = current_pos + field_len
-            new_payload[current_pos:new_pos] = (ctypes.c_uint8*field_len)(*[ord(b) for b in value])
-            current_pos = new_pos
+            FieldHeader.BufferOffset = HeaderSize + source_pos
+            new_pos = copy_pos + field_len
+            new_payload[copy_pos:new_pos] = (ctypes.c_uint8*field_len)(*[ord(b) for b in value])
+            copy_pos = new_pos
+            source_pos = source_pos + field_len
         self.payload = new_payload
 
     def get_string_fields(self):
@@ -306,10 +313,25 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
 
     def set_negotiate_flag(self, flag_bit, value):
         """Sets the given negotiate flag on or off depending on if value evaluates to True or False"""
+        optional_length_old = self.get_optional_length()
         if value:
             self.MessageFields.NegotiateFlags |= flag_bit
         else:
             self.MessageFields.NegotiateFlags &= ~flag_bit
+        optional_length_new = self.get_optional_length()
+        if optional_length_new != optional_length_old:
+            self.set_string_fields(self.get_string_fields(), optional_length_new - optional_length_old)
+
+    def set_negotiate_flags(self, NegFlg):
+        """ NegotiateFlags should not be set directly, because some flags can affect the structure of the payload. Eg setting
+            NTLMSSP_NEGOTIATE_VERSION directly will lead to a segmentation fault if the payload is not enlarged to make space for
+            the version information
+        """
+        optional_length_old = self.get_optional_length()
+        self.MessageFields.NegotiateFlags = NegFlg
+        optional_length_new = self.get_optional_length()
+        if optional_length_new != optional_length_old:
+            self.set_string_fields(self.get_string_fields(), optional_length_new - optional_length_old)
 
     def get_negotiate_flag(self, flag_bit):
         """Returns whether the given negotiate flag bit is set"""
@@ -417,7 +439,7 @@ class NTLMNegotiateMessage(NTLMMessage):
         """Constructs a new NTLM Negotiate Message"""
         self.Header.Signature = NTLM_PROTOCOL_SIGNATURE
         self.Header.MessageType = NTLM_MESSAGE_TYPE.NtLmNegotiate.const
-        self.MessageDependentFields.MessageNegotiateFields.NegotiateFlags = self.DEFAULT_FLAGS
+        self.set_negotiate_flags(self.DEFAULT_FLAGS)
         self.DomainName = DomainName
         self.Workstation = Workstation
 
@@ -431,7 +453,7 @@ class NTLMChallengeMessage(NTLMMessage):
         """Constructs a new NTLM Challenge Message"""
         self.Header.Signature = NTLM_PROTOCOL_SIGNATURE
         self.Header.MessageType = NTLM_MESSAGE_TYPE.NtLmChallenge.const
-        self.MessageDependentFields.MessageChallengeFields.NegotiateFlags = self.DEFAULT_FLAGS
+        self.set_negotiate_flags(self.DEFAULT_FLAGS)
         self.TargetName = TargetName
         self.ServerChallenge = ServerChallenge
         self.TargetInfo = TargetInfo
