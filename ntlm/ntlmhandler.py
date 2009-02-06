@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import ntlm
 from ntlm2 import NTLM_FLAGS
 import des
@@ -30,6 +31,9 @@ class ResponseData:
 	self.LmChallengeResponse = LmChallengeResponse
 	self.SessionBaseKey = SessionBaseKey
 
+class NTLM_Exception(Exception):
+    pass
+
 #-----------------------------------------------------------------------------------------------
 # BaseHandler
 #-----------------------------------------------------------------------------------------------
@@ -40,8 +44,85 @@ class BaseHandler(object):
 
     unicode = 'utf-16le'
 
-    def __init__(self, encoding='utf-16le'):
+    def __init__(self, encoding='utf-16le', unsupported_flags=0):
+	""" encoding determines the default format in which to encode data. In some cases the specification explicitly defines the
+	    format to be used in which case the default encoding is ignored.
+	    supported_flags contains a series of bits indicating which flags are supported by the client/server. If this value is
+	    None, then all flags are assumed to be supported
+	"""
 	self.encoding = encoding
+	self.unsupported_flags = unsupported_flags
+	#Some flags must be supported
+	if unsupported_flags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN:
+	    self.unsupported_flags = self.unsupported_flags ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN
+	if unsupported_flags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM:
+	    self.unsupported_flags = self.unsupported_flags ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM
+
+    def create_negotiate_message(self, NegFlg=None, domain=None, workstation=None, supply_os_version=False):
+	"""Returns an NTLM negotiate message
+	    NegFlg 		- If this value is not None, overwrite the default flags
+	    domain 		- If this value is not None, include domain in the message
+	    workstation 	- If this value is not None, include workstation in the message
+	    supply_os_version	- If this value is True, try to include the OS version info
+	"""
+	if NegFlg is None:
+	    NegFlg = ntlm2.NTLMNegotiateMessage.DEFAULT_FLAGS
+
+	#Negotiate message MUST set these flags - [MS-NLMP] pages 33 and 34
+	NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM
+
+	#Filter the Negotiate Flags down to those which are actually supported. By default all flags are supported.
+	NegFlg = self.supported_flags(NegFlg)
+
+	#Set any flags which are required by current flags. Eg Setting NTLMSSP_NEGOTIATE_SEAL requires that NTLMSSP_NEGOTIATE_56
+	#gets set if it is supported. For now, just set all required flags and remove all unsupported flags later.
+	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL:
+	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_56
+	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128
+
+	#Additional flags may have been added. Filter the Negotiate Flags down to those which are actually supported.
+	NegFlg = self.supported_flags(NegFlg)
+
+	#Check that a choice of encoding can still be negotiated.
+	if not NegFlg & NTLM_FLAGS.NTLM_NEGOTIATE_OEM and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE:
+	    if self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE):
+		NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE
+	    elif self.supported_flags(NTLM_FLAGS.NTLM_NEGOTIATE_OEM):
+		NegFlg = NegFlg | NTLM_FLAGS.NTLM_NEGOTIATE_OEM
+	    else:
+		raise NTLM_Exception("Could not set NTLM_NEGOTIATE_OEM or NTLMSSP_NEGOTIATE_UNICODE flags")
+
+	if workstation is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED):
+	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
+	    #TODO - Add workstation to message
+
+	if domain is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED):
+	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED
+	    #TODO - Add domain to message
+
+	#Prepare values for OS version information
+	try:
+	    major, minor, build, platform, text = sys.getwindowsversion()
+	except:
+	    #TODO - log a warning - The version info could not be supplied
+	    supply_os_version = False
+
+	if supply_os_version:
+	    pass #TODO - Add version details to message
+
+	#This flag requires that the protocol version number is supplied in the Version field. This is for debugging only.
+	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
+	    #TODO - handle the presence of NTLMSSP_NEGOTIATE_VERSION flag
+	    if supply_os_version:
+		pass	#There is already a version field
+	    else:
+		pass	#There is currently no version field
+
+    def create_challenge_message(self):
+	"""Still need to decide what arguments this should take"""
+
+    def create_authenticate_message(self):
+	"""Still need to decide what arguments this should take"""
 
     def create_LM_hashed_password(self, password, user, domain):
 	"""Returns an LM hashed password based on the NTLM version implementation.
@@ -60,20 +141,26 @@ class BaseHandler(object):
 	   user and domain are required for v2 and can just be ignored for version 1"""
 	raise NotImplementedError("%s.%s needs a \"compute_response\" function"%(self.__class__.__module__, self.__class__.__name__))
 
-    def create_negotiate_message(self):
-	"""Still need to decide what arguments this should take"""
-
-    def create_challenge_message(self):
-	"""Still need to decide what arguments this should take"""
-
-    def create_authenticate_message(self):
-	"""Still need to decide what arguments this should take"""
+    def supported_flags(self, flags):
+	"""Function filters out any flags not supported by client/server"""
+	temp = flags | self.unsupported_flags
+	return temp ^ self.unsupported_flags
 
 #-----------------------------------------------------------------------------------------------
 # NTLMHandler_v1
 #-----------------------------------------------------------------------------------------------
 
+#TODO :: Enable support of Version 2 session security in NTLMv1Handler
+#Note: NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY is used to request version 2 session security for a version 1 client/server
+#This requires NTLMHandler_v1 but with access to version 2 security.
+
 class NTLMHandler_v1(BaseHandler):
+
+    def __init__(self, encoding='utf-16le', unsupported_flags=0):
+	super(NTLMHandler_v1, self).__init__(encoding,unsupported_flags)
+	#Mark NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY as unsupported, since NTLM v2 security features must be supported
+	#in order to support this flag
+	self.unsupported_flags = self.unsupported_flags | NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
 
     def create_LM_hashed_password(self, password, user, domain):
 	return ntlm.create_LM_hashed_password_v1(password)
@@ -117,6 +204,7 @@ class NTLMHandler_v1(BaseHandler):
 #-----------------------------------------------------------------------------------------------
 
 class NTLMHandler_v2(BaseHandler):
+
     def create_LM_hashed_password(self, password, user, domain):
 	return self.create_NT_hashed_password(password, user, domain)
 
