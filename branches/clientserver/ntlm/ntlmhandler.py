@@ -2,6 +2,7 @@
 
 import sys
 import ntlm
+import ntlm2
 from ntlm2 import NTLM_FLAGS
 import des
 import hashlib
@@ -58,12 +59,11 @@ class BaseHandler(object):
 	if unsupported_flags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM:
 	    self.unsupported_flags = self.unsupported_flags ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM
 
-    def create_negotiate_message(self, NegFlg=None, domain=None, workstation=None, supply_os_version=False):
+    def create_negotiate_message(self, NegFlg=None, domain=None, workstation=None):
 	"""Returns an NTLM negotiate message
 	    NegFlg 		- If this value is not None, overwrite the default flags
 	    domain 		- If this value is not None, include domain in the message
 	    workstation 	- If this value is not None, include workstation in the message
-	    supply_os_version	- If this value is True, try to include the OS version info
 	"""
 	if NegFlg is None:
 	    NegFlg = ntlm2.NTLMNegotiateMessage.DEFAULT_FLAGS
@@ -84,39 +84,45 @@ class BaseHandler(object):
 	NegFlg = self.supported_flags(NegFlg)
 
 	#Check that a choice of encoding can still be negotiated.
-	if not NegFlg & NTLM_FLAGS.NTLM_NEGOTIATE_OEM and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE:
+	if not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE:
 	    if self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE):
 		NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE
-	    elif self.supported_flags(NTLM_FLAGS.NTLM_NEGOTIATE_OEM):
-		NegFlg = NegFlg | NTLM_FLAGS.NTLM_NEGOTIATE_OEM
+	    elif self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM):
+		NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM
 	    else:
 		raise NTLM_Exception("Could not set NTLM_NEGOTIATE_OEM or NTLMSSP_NEGOTIATE_UNICODE flags")
 
+	#Ready to create the negotiate message
+	negotiate_message = ntlm2.NTLMMessage()
+	negotiate_message.Header.Signature = ntlm2.NTLM_PROTOCOL_SIGNATURE
+        negotiate_message.Header.MessageType = ntlm2.NTLM_MESSAGE_TYPE.NtLmNegotiate.const
+
 	if workstation is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
-	    #TODO - Add workstation to message
+	    negotiate_message.set_string_field("Workstation", workstation)
 
 	if domain is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED
-	    #TODO - Add domain to message
+	    negotiate_message.set_string_field("DomainName", domain)
 
 	#Prepare values for OS version information
-	try:
-	    major, minor, build, platform, text = sys.getwindowsversion()
-	except:
-	    #TODO - log a warning - The version info could not be supplied
-	    supply_os_version = False
-
-	if supply_os_version:
-	    pass #TODO - Add version details to message
-
-	#This flag requires that the protocol version number is supplied in the Version field. This is for debugging only.
 	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
-	    #TODO - handle the presence of NTLMSSP_NEGOTIATE_VERSION flag
-	    if supply_os_version:
-		pass	#There is already a version field
-	    else:
-		pass	#There is currently no version field
+	    try:
+		major, minor, build, platform, text = sys.getwindowsversion()
+		#TODO - Revision version MUST have one of the values below - work out which
+		#NTLMSSP_REVISION_W2K3 		0x0F 	 Version 15 of the NTLMSSP is in use.
+		#NTLMSSP_REVISION_W2K3_RC1 	0x0A	 Version 10 of the NTLMSSP is in use.
+		version = negotiate_message.get_version_field()
+		version.ProductMajorVersion = major
+		version.ProductMinorVersion = minor
+		version.ProductBuild = build
+		version.NTLMRevisionCurrent = 0xf #Just hardcode a value for now
+	    except:
+		#TODO - log a warning - The version info could not be supplied
+		NegFlg = NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION
+
+	negotiate_message.set_negotiate_flags(NegFlg)
+	return negotiate_message.get_message_contents()
 
     def create_challenge_message(self):
 	"""Still need to decide what arguments this should take"""

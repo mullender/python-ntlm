@@ -150,7 +150,7 @@ class TestNTLMClient(object):
         assert version.ProductBuild == 2195
         assert version.NTLMRevisionCurrent == 0xf
 
-    def test_create_v1_negotiate_message(self):
+    def test_manually_create_negotiate_message(self):
         """Tests the new method of creating ntlm negotiate messages"""
         negotiate_message = ntlm2.NTLMMessage()
         negotiate_message.Header.Signature = ntlm2.NTLM_PROTOCOL_SIGNATURE
@@ -163,7 +163,7 @@ class TestNTLMClient(object):
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
         #This test fails because blank values still get encoded. So the message is still correct but there are unneeded trailing zeros
-        #assert negotiate_bytes == HexToByte("4e544c4d535350000100000002020000")
+        assert negotiate_bytes == HexToByte("4e544c4d535350000100000002020000")
 
         flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
         negotiate_message.set_negotiate_flags(flags)
@@ -188,6 +188,22 @@ class TestNTLMClient(object):
         negotiate_bytes = base64.b64decode(negotiate_b64)
         #There is a possible error setting the version information
         assert negotiate_bytes == HexToByte("4e544c4d53535000010000000732000206000600330000000b000b0028000000050093080000000f574f524b53544154494f4e444f4d41494e")
+
+    def test_method__create_negotiate_message(self):
+        flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
+        handler = ntlmhandler.NTLMHandler_v1()
+        negotiate_bytes = handler.create_negotiate_message(flags, "DOMAIN", "WORKSTATION")
+        negotiate_b64 = base64.b64encode(negotiate_bytes)
+        negotiate_bytes = base64.b64decode(negotiate_b64)
+        assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
+
+        handler = ntlmhandler.NTLMHandler_v2()
+        handler = ntlmhandler.NTLMHandler_v1()
+        negotiate_bytes = handler.create_negotiate_message(flags, "DOMAIN", "WORKSTATION")
+        negotiate_b64 = base64.b64encode(negotiate_bytes)
+        negotiate_bytes = base64.b64decode(negotiate_b64)
+        assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
+
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
