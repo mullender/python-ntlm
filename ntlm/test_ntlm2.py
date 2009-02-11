@@ -227,7 +227,30 @@ class TestNTLMClient(object):
     # Challenge Message Tests
     # -------------------------------------------------------------------------------------------------------------
 
-    def test_create_av_pair_from_list(self):
+    def test_create_av_pair(self):
+        pair = ntlm2.AV_PAIR.create(1,"SERVER".encode("utf-16le"))
+        assert pair.to_byte_string() == HexToByte("01000c00530045005200560045005200")
+        pair = ntlm2.AV_PAIR.create(2,"DOMAIN".encode("utf-16le"))
+        assert pair.to_byte_string() == HexToByte("02000c0044004f004d00410049004e00")
+        pair = ntlm2.AV_PAIR.create(3,"server.domain.com".encode("utf-16le"))
+        assert pair.to_byte_string() == HexToByte("030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d00")
+        pair = ntlm2.AV_PAIR.create(4,"domain.com".encode("utf-16le"))
+        assert pair.to_byte_string() == HexToByte("0400140064006f006d00610069006e002e0063006f006d00")
+        #This test is just to make sure that AvId and AvLen are written correctly for values larger than 256. There is no AvId 770.
+        pair = ntlm2.AV_PAIR.create(770,"domain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.com".encode("utf-16le"))
+        assert pair.Header.AvId == 770
+        assert pair.Header.AvLen == 320
+        assert pair.to_byte_string() == HexToByte("0203400164006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D00")
+
+    def test_read_av_pair(self):
+        bytestring = HexToByte("0203400164006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D0064006F006D00610069006E002E0063006F006D00")
+        pair = ntlm2.AV_PAIR.read(StringIO.StringIO(bytestring))
+        assert pair.Header.AvId == 770
+        assert pair.Header.AvLen == 320
+        assert pair.value_byte_string() == "domain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.comdomain.com".encode("utf-16le")
+        assert pair.to_byte_string() == bytestring
+
+    def test_create_av_pair_handler_from_list(self):
         AVHandler = ntlmhandler.AV_PAIR_Handler([   (1,"SERVER".encode("utf-16le")),
                                                     (2,"DOMAIN".encode("utf-16le")),
                                                     (4,"domain.com".encode("utf-16le"))
@@ -247,7 +270,7 @@ class TestNTLMClient(object):
         ids_found.sort()
         assert ids_found == [1,2,4]
 
-    def test_create_av_pair_from_bytes(self):
+    def test_create_av_pair_handler_from_bytes(self):
         tinfo = HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
         AVHandler = ntlmhandler.AV_PAIR_Handler(tinfo)
         ids_found = []

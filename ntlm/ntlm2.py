@@ -165,7 +165,11 @@ class AV_PAIR(ctypes.LittleEndianStructure, FileStructure):
     def value_byte_string(self):
         return "".join([chr(x) for x in self.Value[0:self.Header.AvLen]])
 
-    #def to_byte_string
+    def to_byte_string(self):
+        pointer = ctypes.POINTER(AV_Header)()
+        pointer.contents = self.Header
+        disk_block = ctypes.cast(pointer, ctypes.POINTER(ctypes.c_uint8*4)).contents
+        return "".join([chr(x) for x in disk_block[0:4]]) + self.value_byte_string()
 
 
 class NTLMMessageNegotiateFields(NTLMMessageDependentFieldsHandler):
