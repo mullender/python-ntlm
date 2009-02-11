@@ -3,10 +3,11 @@
 import sys
 import ntlm
 import ntlm2
-from ntlm2 import NTLM_FLAGS
+from ntlm2 import NTLM_FLAGS, AV_TYPES
 import des
 import hashlib
 import hmac
+import StringIO
 
 def desl(k, d):
     """Helper function which implements "Data Encryption Standard Long" algorithm.
@@ -34,6 +35,50 @@ class ResponseData:
 
 class NTLM_Exception(Exception):
     pass
+
+class AV_PAIR_Handler:
+    def __init__(self, value=None):
+	if value is not None:
+	    self.set_av_pairs(value)
+	else:
+	    self._AV_PAIRS = []
+
+    def get_av_pairs(self):
+	return self._AV_PAIRS
+
+    def set_av_pairs(self, value):
+	#av_pairs will be stored as tuples of (AvId, Value) where Value is a "utf-16le" Byte String
+	if isinstance(value, basestring):
+	    self._set_av_pairs_from_bytes(value)
+	elif isinstance(value, list) or isinstance(value, tuple):
+	    self._set_av_pairs_from_list(value)
+
+    def _set_av_pairs_from_list(self, alist):
+	self._AV_PAIRS = []
+	for pair in alist:
+	    if (isinstance(pair, list) or isinstance(pair, tuple)) and len(pair) == 2 and isinstance(pair[0], int):
+		self._AV_PAIRS.append(ntlm2.AV_PAIR.create(pair[0], pair[1]))
+
+    def _set_av_pairs_from_bytes(self, bytes):
+	self._AV_PAIRS = []
+	stringio = StringIO.StringIO(bytes)
+	while True:
+	    current = ntlm2.AV_PAIR.read(stringio)
+	    if current.AvId == AV_TYPES.MsvAvEOL:
+		break
+	    if isinstance(current, ntlm2.AV_PAIR):
+		#Don't bother to read the Terminating AV pair as it is not needed
+		self._AV_PAIRS.append(current)
+
+    def add_av_pair(self, AvId, Value):
+	#Assumes that Value is already encoded as a "utf-16le" Byte String
+	self._AV_PAIRS.append((AvId, Value))
+
+    def toByteString(self):
+	"""Convert List of AV_PAIRs to an encoded ByteString, which can be used in an NTLM message"""
+	#value = "".join([chr(x) for x in current.Value[0:current.AvLen]])
+	result = ""
+	#for pair in self._AV_PAIRS:
 
 #-----------------------------------------------------------------------------------------------
 # BaseHandler
@@ -223,7 +268,7 @@ class NTLMHandler_v2(BaseHandler):
 	ResponseKeyLM = self.create_LM_hashed_password(password, user, domain)
 	NTChallengeResponse=None
 	LmChallengeResponse=None
-	
+
 	#TODO get proper values for the hardcoded values Responserversion and HiResponserversion
 	HiResponserversion = Responserversion = "\x01"
 	temp = self._temp(Responserversion, HiResponserversion, Time, ClientChallenge, ServerName)
@@ -246,4 +291,3 @@ class NTLMHandler_v2(BaseHandler):
 
     def _temp(self, Responserversion, HiResponserversion, Time, ClientChallenge, ServerName):
 	return Responserversion + HiResponserversion + '\x00'*6 + Time + ClientChallenge + '\x00'*4 + ServerName + '\x00'*4
-
