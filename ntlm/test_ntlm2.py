@@ -355,16 +355,31 @@ class TestNTLMClient(object):
         expected_challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
         challenge_message = ntlm2.NTLMChallengeMessage()
         challenge_message.set_negotiate_flags(0x0202)
-        #challenge_message.TargetName = TargetName
-        #negotiate_message.set_string_field("DomainName", "DOMAIN")
-
         challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
+        negotiate_bytes = challenge_message.get_message_contents()
+        negotiate_bytes = "".join([chr(x) for x in negotiate_bytes])
+        #This fails because the Challenge message has unneccessary trailing zeros. However the message is correct
+        assert negotiate_bytes == expected_challenge
 
-        #challenge_message.TargetInfo = TargetInfo
+    def test_manually_create_full_challenge_message(self):
+        """The results of this test are dependent on the ordering of TargetName and TargetInfo in the payload"""
+        #The value below should be used if TargetName is the first value in the payload
+        #expected_challenge = HexToByte("4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c00000044004f004d00410049004e0002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
+        #The value below should be used if TargetInfo is the first value in the payload
+        expected_challenge = HexToByte("4e544c4d53535000020000000c000c0092000000010281000123456789abcdef0000000000000000620062003000000002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d000000000044004f004d00410049004e00")
+        challenge_message = ntlm2.NTLMChallengeMessage()
+        challenge_message.set_negotiate_flags(0x00000001 | 0x00000200 |0x00010000 | 0x00800000)
+        challenge_message.TargetName = "DOMAIN".encode("utf-16le")
+        challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
+        TargetInfo = ntlmhandler.AV_PAIR_Handler([   (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvDnsDomainName,"domain.com".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvDnsComputerName,"server.domain.com".encode("utf-16le"))
+                                                ])
+        challenge_message.TargetInfo = TargetInfo.to_byte_string()
         negotiate_bytes = challenge_message.get_message_contents()
         negotiate_bytes = "".join([chr(x) for x in negotiate_bytes])
         assert negotiate_bytes == expected_challenge
-
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
