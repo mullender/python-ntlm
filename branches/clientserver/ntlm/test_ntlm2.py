@@ -56,7 +56,7 @@ class TestNTLMClient(object):
 
         # NTLM VERSION 1
         handler = ntlmhandler.NTLMHandler_v1()
-        
+
         #Test Case: NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY not set and NTLMSSP_NEGOTIATE_NT_ONLY not set [MS-NTLM] page 73
         responsedata = handler.compute_response(0, Password, User, Domain, ServerChallenge, ClientChallenge, Time, ServerName)
 
@@ -200,7 +200,7 @@ class TestNTLMClient(object):
         version.ProductMinorVersion = 0
         version.ProductBuild = 2195
         version.NTLMRevisionCurrent = 0xf
-        
+
         negotiate_bytes = negotiate_message.get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
@@ -226,6 +226,47 @@ class TestNTLMClient(object):
     # -------------------------------------------------------------------------------------------------------------
     # Challenge Message Tests
     # -------------------------------------------------------------------------------------------------------------
+
+    def test_create_av_pair_from_list(self):
+        AVHandler = ntlmhandler.AV_PAIR_Handler([   (1,"SERVER".encode("utf-16le")),
+                                                    (2,"DOMAIN".encode("utf-16le")),
+                                                    (4,"domain.com".encode("utf-16le"))
+                                                ])
+        ids_found = []
+        for pair in AVHandler.get_av_pairs():
+            ids_found.append(pair.AvId)
+            if pair.AvId == 1:
+                assert pair.value_byte_string() == "SERVER".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 2:
+                assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 4:
+                assert pair.value_byte_string() == "domain.com".encode("utf-16le")
+                assert pair.AvLen == 20
+        ids_found.sort()
+        assert ids_found == [1,2,4]
+
+    def test_create_av_pair_from_bytes(self):
+        tinfo = HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
+        AVHandler = ntlmhandler.AV_PAIR_Handler(tinfo)
+        ids_found = []
+        for pair in AVHandler.get_av_pairs():
+            ids_found.append(pair.AvId)
+            if pair.AvId == 1:
+                assert pair.value_byte_string() == "SERVER".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 2:
+                assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 3:
+                assert pair.value_byte_string() == "server.domain.com".encode("utf-16le")
+                assert pair.AvLen == 34
+            elif pair.AvId == 4:
+                assert pair.value_byte_string() == "domain.com".encode("utf-16le")
+                assert pair.AvLen == 20
+        ids_found.sort()
+        assert ids_found == [1,2,3,4]
 
     def test_parse_simple_challenge(self):
         """Tests parsing ntlm challenge messages"""
@@ -256,6 +297,27 @@ class TestNTLMClient(object):
         assert isinstance(challenge_fields, ntlm2.NTLMMessageChallengeFields)
         assert challenge_fields.ServerChallenge[0:8] == [ord(c) for c in HexToByte("0123456789abcdef")]
         assert challenge_fields.NegotiateFlags ==  0x00000001 | 0x00000200 |0x00010000 | 0x00800000
+        #unpack and test Target Information Data
+        AVHandler = ntlmhandler.AV_PAIR_Handler(challenge_message.get_string_field("TargetInfo"))
+        ids_found = []
+        for pair in AVHandler.get_av_pairs():
+            ids_found.append(pair.AvId)
+            if pair.AvId == 1:
+                assert pair.value_byte_string() == "SERVER".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 2:
+                assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
+                assert pair.AvLen == 12
+            elif pair.AvId == 3:
+                assert pair.value_byte_string() == "server.domain.com".encode("utf-16le")
+                assert pair.AvLen == 34
+            elif pair.AvId == 4:
+                assert pair.value_byte_string() == "domain.com".encode("utf-16le")
+                assert pair.AvLen == 20
+        ids_found.sort()
+        assert ids_found == [1,2,3,4]
 
+    def test_manually_create_simple_challenge_message(self):
+        pass
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types

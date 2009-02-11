@@ -82,6 +82,19 @@ class NTLM_FLAGS:
     NTLMSSP_NEGOTIATE_KEY_EXCHANGE             =  0x40000000
     NTLMSSP_NEGOTIATE_56                       =  0x80000000
 
+class AV_TYPES:
+    MsvAvEOL                = 0
+    MsvAvNbComputerName     = 1
+    MsvAvNbDomainName       = 2
+    MsvAvDnsComputerName    = 3
+    MsvAvDnsDomainName      = 4
+    MsvAvDnsTreeName        = 5
+    MsvAvFlags              = 6
+    MsvAvTimestamp          = 7
+    MsAvRestrictions        = 8
+    MsvAvTargetName         = 9
+    MsvChannelBindings      = 10
+
 NTLM_PROTOCOL_SIGNATURE = "NTLMSSP\0"
 
 class StringHeader(ctypes.LittleEndianStructure, FileStructure):
@@ -116,6 +129,35 @@ class NTLMVersionStructure(ctypes.LittleEndianStructure, FileStructure):
                 ("Reserved", ctypes.c_uint8*3),
                 ("NTLMRevisionCurrent", ctypes.c_uint8),
                ]
+
+class AV_PAIR(ctypes.LittleEndianStructure, FileStructure):
+    _pack_ = 1
+    _fields_ = [("AvId", ctypes.c_uint16),
+                ("AvLen", ctypes.c_uint16),
+                ("Value", ctypes.POINTER(ctypes.c_uint8)),
+               ]
+
+    @classmethod
+    def create(cls, AvId, Value):
+        disk_block = (ctypes.c_uint8*4)(*[0,0,0,0])
+        s = ctypes.cast(disk_block, ctypes.POINTER(cls)).contents
+        s.AvId = AvId
+        s.AvLen = len(Value)
+        s.Value = (ctypes.c_uint8*s.AvLen)(*[ord(b) for b in Value])
+        s.verify()
+        return s
+
+    @classmethod
+    def read(cls, f):
+        disk_block = (ctypes.c_uint8*4)(*[ord(b) for b in f.read(4)])
+        s = ctypes.cast(disk_block, ctypes.POINTER(cls)).contents
+        s.Value = (ctypes.c_uint8*s.AvLen)(*[ord(b) for b in f.read(s.AvLen)])
+        s.verify()
+        return s
+
+    def value_byte_string(self):
+        return "".join([chr(x) for x in self.Value[0:self.AvLen]])
+
 
 class NTLMMessageNegotiateFields(NTLMMessageDependentFieldsHandler):
     _pack_ = 1
@@ -173,7 +215,7 @@ class NTLMMessageHeader(ctypes.LittleEndianStructure, FileStructure):
     _fields_ = [("Signature", ctypes.c_char*8),
                 ("MessageType", ctypes.c_uint32),
                ]
- 
+
     def verify(self):
         """verifies that the structure is valid"""
         assert self.Signature == NTLM_PROTOCOL_SIGNATURE.rstrip("\0")
@@ -288,7 +330,7 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
         for name in MessageFields.get_string_fields():
             string_fields[name] = self.get_string_field(name)
         return string_fields
-       
+
     def verify(self):
         """verifies that the structure is valid"""
         self.Header.verify()
@@ -462,4 +504,3 @@ class NTLMChallengeMessage(NTLMMessage):
     ServerChallenge = BinaryProperty("ServerChallenge")
     # TODO: handle AV_PAIRs here
     TargetInfo = StringPropertyWithFlag("TargetInfo", NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO)
-
