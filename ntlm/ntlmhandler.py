@@ -76,9 +76,12 @@ class AV_PAIR_Handler:
 
     def to_byte_string(self):
 	"""Convert List of AV_PAIRs to an encoded ByteString, which can be used in an NTLM message"""
-	#value = "".join([chr(x) for x in current.Value[0:current.AvLen]])
 	result = ""
-	#for pair in self._AV_PAIRS:
+	for pair in self._AV_PAIRS:
+	    result += pair.to_byte_string()
+	#Add terminating AV_PAIR
+	result += ntlm2.AV_PAIR.create(AV_TYPES.MsvAvEOL, "").to_byte_string()
+	return result
 
 #-----------------------------------------------------------------------------------------------
 # BaseHandler

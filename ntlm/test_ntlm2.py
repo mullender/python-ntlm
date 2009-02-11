@@ -1,7 +1,7 @@
 """Tests for the NTLM module"""
 
 import ntlm2
-from ntlm2 import NTLM_FLAGS
+from ntlm2 import NTLM_FLAGS, AV_TYPES
 import ntlmhandler
 import base64
 import ctypes
@@ -339,6 +339,17 @@ class TestNTLMClient(object):
                 assert pair.Header.AvLen == 20
         ids_found.sort()
         assert ids_found == [1,2,3,4]
+
+    def test_AV_PAIR_Handler_to_byte_string(self):
+        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType2Message
+        #AV_PAIRS are added in this order to ensure the correct result for comparison with the test value
+        AVHandler = ntlmhandler.AV_PAIR_Handler([   (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvDnsDomainName,"domain.com".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvDnsComputerName,"server.domain.com".encode("utf-16le"))
+                                                ])
+        result = AVHandler.to_byte_string()
+        assert result == HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
 
     def test_manually_create_simple_challenge_message(self):
         pass
