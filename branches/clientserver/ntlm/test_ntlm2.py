@@ -293,8 +293,8 @@ class TestNTLMClient(object):
 
     def test_parse_simple_challenge(self):
         """Tests parsing ntlm challenge messages"""
-        callenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
-        f = StringIO.StringIO(callenge)
+        challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
+        f = StringIO.StringIO(challenge)
         challenge_message = ntlm2.NTLMMessage.read(f)
         assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
         assert challenge_message.get_string_fields() == {"TargetName": "", "TargetInfo": ""}
@@ -305,8 +305,8 @@ class TestNTLMClient(object):
 
     def test_parse_full_challenge(self):
         """Tests parsing ntlm challenge messages"""
-        callenge = HexToByte("4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c00000044004f004d00410049004e0002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
-        f = StringIO.StringIO(callenge)
+        challenge = HexToByte("4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c00000044004f004d00410049004e0002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
+        f = StringIO.StringIO(challenge)
         challenge_message = ntlm2.NTLMMessage.read(f)
         assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
         #TargetName MUST be expressed in the negotiated character set [MS-NLMP] page 21.
@@ -352,6 +352,19 @@ class TestNTLMClient(object):
         assert result == HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
 
     def test_manually_create_simple_challenge_message(self):
-        pass
+        expected_challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
+        challenge_message = ntlm2.NTLMChallengeMessage()
+        challenge_message.set_negotiate_flags(0x0202)
+        #challenge_message.TargetName = TargetName
+        #negotiate_message.set_string_field("DomainName", "DOMAIN")
+
+        challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
+
+        #challenge_message.TargetInfo = TargetInfo
+        negotiate_bytes = challenge_message.get_message_contents()
+        negotiate_bytes = "".join([chr(x) for x in negotiate_bytes])
+        assert negotiate_bytes == expected_challenge
+
+
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
