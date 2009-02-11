@@ -234,16 +234,16 @@ class TestNTLMClient(object):
                                                 ])
         ids_found = []
         for pair in AVHandler.get_av_pairs():
-            ids_found.append(pair.AvId)
-            if pair.AvId == 1:
+            ids_found.append(pair.Header.AvId)
+            if pair.Header.AvId == 1:
                 assert pair.value_byte_string() == "SERVER".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 2:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 2:
                 assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 4:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 4:
                 assert pair.value_byte_string() == "domain.com".encode("utf-16le")
-                assert pair.AvLen == 20
+                assert pair.Header.AvLen == 20
         ids_found.sort()
         assert ids_found == [1,2,4]
 
@@ -252,19 +252,19 @@ class TestNTLMClient(object):
         AVHandler = ntlmhandler.AV_PAIR_Handler(tinfo)
         ids_found = []
         for pair in AVHandler.get_av_pairs():
-            ids_found.append(pair.AvId)
-            if pair.AvId == 1:
+            ids_found.append(pair.Header.AvId)
+            if pair.Header.AvId == 1:
                 assert pair.value_byte_string() == "SERVER".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 2:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 2:
                 assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 3:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 3:
                 assert pair.value_byte_string() == "server.domain.com".encode("utf-16le")
-                assert pair.AvLen == 34
-            elif pair.AvId == 4:
+                assert pair.Header.AvLen == 34
+            elif pair.Header.AvId == 4:
                 assert pair.value_byte_string() == "domain.com".encode("utf-16le")
-                assert pair.AvLen == 20
+                assert pair.Header.AvLen == 20
         ids_found.sort()
         assert ids_found == [1,2,3,4]
 
@@ -301,19 +301,19 @@ class TestNTLMClient(object):
         AVHandler = ntlmhandler.AV_PAIR_Handler(challenge_message.get_string_field("TargetInfo"))
         ids_found = []
         for pair in AVHandler.get_av_pairs():
-            ids_found.append(pair.AvId)
-            if pair.AvId == 1:
+            ids_found.append(pair.Header.AvId)
+            if pair.Header.AvId == 1:
                 assert pair.value_byte_string() == "SERVER".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 2:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 2:
                 assert pair.value_byte_string() == "DOMAIN".encode("utf-16le")
-                assert pair.AvLen == 12
-            elif pair.AvId == 3:
+                assert pair.Header.AvLen == 12
+            elif pair.Header.AvId == 3:
                 assert pair.value_byte_string() == "server.domain.com".encode("utf-16le")
-                assert pair.AvLen == 34
-            elif pair.AvId == 4:
+                assert pair.Header.AvLen == 34
+            elif pair.Header.AvId == 4:
                 assert pair.value_byte_string() == "domain.com".encode("utf-16le")
-                assert pair.AvLen == 20
+                assert pair.Header.AvLen == 20
         ids_found.sort()
         assert ids_found == [1,2,3,4]
 

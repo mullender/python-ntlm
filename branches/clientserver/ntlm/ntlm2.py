@@ -130,33 +130,42 @@ class NTLMVersionStructure(ctypes.LittleEndianStructure, FileStructure):
                 ("NTLMRevisionCurrent", ctypes.c_uint8),
                ]
 
-class AV_PAIR(ctypes.LittleEndianStructure, FileStructure):
+class AV_Header(ctypes.LittleEndianStructure, FileStructure):
     _pack_ = 1
     _fields_ = [("AvId", ctypes.c_uint16),
                 ("AvLen", ctypes.c_uint16),
+               ]
+
+class AV_PAIR(ctypes.LittleEndianStructure, FileStructure):
+    _pack_ = 1
+    _fields_ = [("Header", AV_Header),
                 ("Value", ctypes.POINTER(ctypes.c_uint8)),
                ]
 
     @classmethod
     def create(cls, AvId, Value):
+        result = cls()
         disk_block = (ctypes.c_uint8*4)(*[0,0,0,0])
-        s = ctypes.cast(disk_block, ctypes.POINTER(cls)).contents
-        s.AvId = AvId
-        s.AvLen = len(Value)
-        s.Value = (ctypes.c_uint8*s.AvLen)(*[ord(b) for b in Value])
-        s.verify()
-        return s
+        result.Header = ctypes.cast(disk_block, ctypes.POINTER(AV_Header)).contents
+        result.Header.AvId = AvId
+        result.Header.AvLen = len(Value)
+        result.Value = (ctypes.c_uint8*result.Header.AvLen)(*[ord(b) for b in Value])
+        result.verify()
+        return result
 
     @classmethod
     def read(cls, f):
+        result = cls()
         disk_block = (ctypes.c_uint8*4)(*[ord(b) for b in f.read(4)])
-        s = ctypes.cast(disk_block, ctypes.POINTER(cls)).contents
-        s.Value = (ctypes.c_uint8*s.AvLen)(*[ord(b) for b in f.read(s.AvLen)])
-        s.verify()
-        return s
+        result.Header = ctypes.cast(disk_block, ctypes.POINTER(AV_Header)).contents
+        result.Value = (ctypes.c_uint8*result.Header.AvLen)(*[ord(b) for b in f.read(result.Header.AvLen)])
+        result.verify()
+        return result
 
     def value_byte_string(self):
-        return "".join([chr(x) for x in self.Value[0:self.AvLen]])
+        return "".join([chr(x) for x in self.Value[0:self.Header.AvLen]])
+
+    #def to_byte_string
 
 
 class NTLMMessageNegotiateFields(NTLMMessageDependentFieldsHandler):

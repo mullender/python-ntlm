@@ -64,7 +64,7 @@ class AV_PAIR_Handler:
 	stringio = StringIO.StringIO(bytes)
 	while True:
 	    current = ntlm2.AV_PAIR.read(stringio)
-	    if current.AvId == AV_TYPES.MsvAvEOL:
+	    if current.Header.AvId == AV_TYPES.MsvAvEOL:
 		break
 	    if isinstance(current, ntlm2.AV_PAIR):
 		#Don't bother to read the Terminating AV pair as it is not needed
@@ -74,7 +74,7 @@ class AV_PAIR_Handler:
 	#Assumes that Value is already encoded as a "utf-16le" Byte String
 	self._AV_PAIRS.append((AvId, Value))
 
-    def toByteString(self):
+    def to_byte_string(self):
 	"""Convert List of AV_PAIRs to an encoded ByteString, which can be used in an NTLM message"""
 	#value = "".join([chr(x) for x in current.Value[0:current.AvLen]])
 	result = ""
