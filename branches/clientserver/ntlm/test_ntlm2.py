@@ -340,16 +340,44 @@ class TestNTLMClient(object):
         ids_found.sort()
         assert ids_found == [1,2,3,4]
 
+    def _get_valid_av_string(self, hexvalue, valid_pairs):
+        #Pairs could be encoded in any order, so build test string based on values encountered
+        expected_length = sum([len(pair) for pair in valid_pairs])+8
+
+        #This fails if there are too few pairs in hexvalue
+        assert len(hexvalue) == expected_length
+
+        expected_value=""
+        pair_dict = {}
+        for pair in valid_pairs:
+            pair_dict[pair[1]] = pair
+
+        offset=1    #The id of the current pair is the second array element
+        for pair in valid_pairs:
+            #Concatenating the expected value from available pairs
+            assert offset < len(hexvalue)-8
+            key = hexvalue[offset]
+            value = pair_dict[key]
+            offset += len(value)
+            expected_value +=value
+
+        return expected_value + "00000000"
+
     def test_AV_PAIR_Handler_to_byte_string(self):
         #Example taken from http://davenport.sourceforge.net/ntlm.html#theType2Message
-        #AV_PAIRS are added in this order to ensure the correct result for comparison with the test value
-        AVHandler = ntlmhandler.AV_PAIR_Handler([   (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
-                                                    (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le")),
+        valid_pairs = ["01000c00530045005200560045005200",
+                       "02000c0044004f004d00410049004e00",
+                       "030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d00",
+                       "0400140064006f006d00610069006e002e0063006f006d00"]
+        AVHandler = ntlmhandler.AV_PAIR_Handler([   (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le")),
                                                     (AV_TYPES.MsvAvDnsDomainName,"domain.com".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
                                                     (AV_TYPES.MsvAvDnsComputerName,"server.domain.com".encode("utf-16le"))
                                                 ])
         result = AVHandler.to_byte_string()
-        assert result == HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
+        hexresult = ByteToHex(result).lower().replace(" ","")
+        valid_result = self._get_valid_av_string(hexresult, valid_pairs)
+        assert hexresult == valid_result
 
     def test_manually_create_simple_challenge_message(self):
         expected_challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
@@ -371,15 +399,37 @@ class TestNTLMClient(object):
         challenge_message.set_negotiate_flags(0x00000001 | 0x00000200 |0x00010000 | 0x00800000)
         challenge_message.TargetName = "DOMAIN".encode("utf-16le")
         challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
-        TargetInfo = ntlmhandler.AV_PAIR_Handler([   (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
-                                                    (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le")),
-                                                    (AV_TYPES.MsvAvDnsDomainName,"domain.com".encode("utf-16le")),
-                                                    (AV_TYPES.MsvAvDnsComputerName,"server.domain.com".encode("utf-16le"))
+        TargetInfo = ntlmhandler.AV_PAIR_Handler([  (AV_TYPES.MsvAvDnsDomainName,"domain.com".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvDnsComputerName,"server.domain.com".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvNbDomainName,"DOMAIN".encode("utf-16le")),
+                                                    (AV_TYPES.MsvAvNbComputerName,"SERVER".encode("utf-16le"))
                                                 ])
         challenge_message.TargetInfo = TargetInfo.to_byte_string()
         negotiate_bytes = challenge_message.get_message_contents()
         negotiate_bytes = "".join([chr(x) for x in negotiate_bytes])
-        assert negotiate_bytes == expected_challenge
+        negotiate_hex = ByteToHex(negotiate_bytes).lower().replace(" ","")
+        TargetName_hex = "44004f004d00410049004e00"
+        valid_pairs = ["01000c00530045005200560045005200",
+                       "02000c0044004f004d00410049004e00",
+                       "030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d00",
+                       "0400140064006f006d00610069006e002e0063006f006d00"]
+        valid_length = sum([len(x) for x in valid_pairs]) + 8
+        #In order to determine the ordering of TargetName and TargetInfo, we can just check the 32nd element of their hex strings as there are only two possible values
+        #The tests below are used if TargetName is the first value in the payload
+        if negotiate_hex[32] == "3":
+            TargetInfo_hex = self._get_valid_av_string(negotiate_hex[-valid_length:], valid_pairs)
+            assert negotiate_hex[0:96] == "4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c000000"
+            assert negotiate_hex[96:] == TargetName_hex + TargetInfo_hex
+        #The tests below are used if TargetInfo is the first value in the payload
+        elif negotiate_hex[32] == "9":
+            valid_length += len(TargetName_hex)
+            TargetInfo_hex = self._get_valid_av_string(negotiate_hex[-valid_length:-len(TargetName_hex)], valid_pairs)
+            assert negotiate_hex[0:96] == "4e544c4d53535000020000000c000c0092000000010281000123456789abcdef00000000000000006200620030000000"
+            assert negotiate_hex[96:] == TargetInfo_hex + TargetName_hex
+        else:
+            #The value must be invalid, since neither of the two possiblities above could be identified
+            assert False
+
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
