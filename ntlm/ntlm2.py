@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import ctypes
 import pprint
 
@@ -283,6 +284,17 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
             return version
         else:
             return None
+
+    def _add_version_information(self):
+	major, minor, build, platform, text = sys.getwindowsversion()
+	#TODO - Revision version MUST have one of the values below - work out which
+	#NTLMSSP_REVISION_W2K3 		0x0F 	 Version 15 of the NTLMSSP is in use.
+	#NTLMSSP_REVISION_W2K3_RC1 	0x0A	 Version 10 of the NTLMSSP is in use.
+	version = self.get_version_field()
+	version.ProductMajorVersion = major
+	version.ProductMinorVersion = minor
+	version.ProductBuild = build
+	version.NTLMRevisionCurrent = 0xf #Just hardcode a value for now
 
     def get_optional_length(self):
         """Returns the length of optional Version and MIC fields"""

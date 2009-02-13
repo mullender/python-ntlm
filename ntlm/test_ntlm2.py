@@ -13,7 +13,54 @@ class SysCheat:
     def getwindowsversion(self):
         return (1,2,3,4,"This is not an OS")
 
-ntlmhandler.sys=SysCheat()
+ntlmhandler.ntlm2.sys=SysCheat()
+
+def RandomCheat(self):
+    """This is a bit of a cheat to make sure that the value of the nonce can be predicted during testing"""
+    if RandomCheat.value is None:
+        return self._old_get_nonce()
+    return RandomCheat.value
+
+RandomCheat.value = None #"0123456789abcdef"
+ntlmhandler.BaseHandler._old_get_nonce = ntlmhandler.BaseHandler._get_nonce
+ntlmhandler.BaseHandler._get_nonce = RandomCheat
+
+class ATestServer(ntlmhandler.ServerInterface):
+    def __init__(self, nb_n, nb_d, dns_n, dns_d, f_n):
+        self.netbios_name = nb_n
+        self.netbios_domain = nb_d
+        self.dns_name = dns_n
+        self.dns_domain = dns_d
+        self.dns_forest_name = f_n
+
+    def negotiated_security_ok(self, NegFlg):
+	return True
+
+    def get_NetBIOS_name(self):
+        return self.netbios_name
+
+    def get_NetBIOS_domain(self):
+        return self.netbios_domain
+
+    def get_DNS_name(self):
+        return self.dns_name
+
+    def get_DNS_domain(self):
+        return self.dns_domain
+
+    def get_DNS_forest_name(self):
+        return self.dns_forest_name
+
+class ATestClient(ntlmhandler.ClientInterface):
+    def __init__(self, w, d):
+        self.workstation = w
+        self.domain = d
+
+    def get_workstation(self):
+        return self.workstation
+
+    def get_domain(self):
+        return self.domain
 
 def unicode_encode(s):
     """convert a unicode string to a byte encoding"""
@@ -57,8 +104,8 @@ class TestNTLMClient(object):
         # NTLM VERSION 1
         handler = ntlmhandler.NTLMHandler_v1()
 
-        #Test Case: NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY not set and NTLMSSP_NEGOTIATE_NT_ONLY not set [MS-NTLM] page 73
-        responsedata = handler.compute_response(0, Password, User, Domain, ServerChallenge, ClientChallenge, Time, ServerName)
+        #Test Case: NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY not set and NTLMSSP_NEGOTIATE_NT_ONLY not set [MS-NLMP] page 73
+        responsedata = handler.compute_response(0, Password, User, Domain, ServerChallenge, ClientChallenge, Time, ServerName, handler.unicode)
 
         # [MS-NLMP] page 72
         assert responsedata.ResponseKeyNT == HexToByte("a4f49c40 6510bdca b6824ee7 c30fd852")
@@ -84,7 +131,7 @@ class TestNTLMClient(object):
         avpair_terminator = "00000000"
         targetinfo = HexToByte(domainname_avpair+servername_avpair+avpair_terminator)
 
-        responsedata = handler.compute_response(0, Password, User, Domain, ServerChallenge, ClientChallenge, Time, targetinfo)
+        responsedata = handler.compute_response(0, Password, User, Domain, ServerChallenge, ClientChallenge, Time, targetinfo, handler.unicode)
 
         # [MS-NLMP] page 72
         assert responsedata.ResponseKeyNT == HexToByte("0c868a40 3bfd7a93 a3001ef2 2ef02e3f")
@@ -209,15 +256,16 @@ class TestNTLMClient(object):
 
     def test_method__create_negotiate_message(self):
         flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
+        client_object = ATestClient("WORKSTATION", "DOMAIN")
         handler = ntlmhandler.NTLMHandler_v1()
-        negotiate_bytes = handler.create_negotiate_message(flags, "DOMAIN", "WORKSTATION")
+        negotiate_bytes = handler.create_negotiate_message(flags, client_object)
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
         assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
 
         handler = ntlmhandler.NTLMHandler_v2()
         handler = ntlmhandler.NTLMHandler_v1()
-        negotiate_bytes = handler.create_negotiate_message(flags, "DOMAIN", "WORKSTATION")
+        negotiate_bytes = handler.create_negotiate_message(flags, client_object)
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
         assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
@@ -391,10 +439,6 @@ class TestNTLMClient(object):
 
     def test_manually_create_full_challenge_message(self):
         """The results of this test are dependent on the ordering of TargetName and TargetInfo in the payload"""
-        #The value below should be used if TargetName is the first value in the payload
-        #expected_challenge = HexToByte("4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c00000044004f004d00410049004e0002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
-        #The value below should be used if TargetInfo is the first value in the payload
-        expected_challenge = HexToByte("4e544c4d53535000020000000c000c0092000000010281000123456789abcdef0000000000000000620062003000000002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d000000000044004f004d00410049004e00")
         challenge_message = ntlm2.NTLMChallengeMessage()
         challenge_message.set_negotiate_flags(0x00000001 | 0x00000200 |0x00010000 | 0x00800000)
         challenge_message.TargetName = "DOMAIN".encode("utf-16le")
@@ -430,6 +474,38 @@ class TestNTLMClient(object):
             #The value must be invalid, since neither of the two possiblities above could be identified
             assert False
 
+    def test_method__create_full_challenge_message(self):
+        expected_challenge = "4e544c4d53535000020000000c000c0092000000058281000123456789abcdef0000000000000000620062003000000002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d000000000044004f004d00410049004e00"
+        server_object = ATestServer("SERVER", "DOMAIN", "server.domain.com", "domain.com", None)
+        client_flags = 0x00000001 | 0x00000200 | 0x00800000
+        cfg_flags = 0x00010000
+        RandomCheat.value = HexToByte("0123456789abcdef")  #Ensure that the server challenge will be 0123456789abcdef
+        handler = ntlmhandler.NTLMHandler_v1()
+        negotiate_bytes = handler.create_challenge_message(client_flags, cfg_flags, server_object)
+        negotiate_hex = ByteToHex("".join([chr(x) for x in negotiate_bytes])).lower().replace(" ","")
+        RandomCheat.value = None
+        #Need to work out the ordering of the payload fields in order to work out what the valid message looks like
+        TargetName_hex = "44004f004d00410049004e00"
+        valid_pairs = ["01000c00530045005200560045005200",
+                       "02000c0044004f004d00410049004e00",
+                       "030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d00",
+                       "0400140064006f006d00610069006e002e0063006f006d00"]
+        valid_length = sum([len(x) for x in valid_pairs]) + 8
+        #In order to determine the ordering of TargetName and TargetInfo, we can just check the 32nd element of their hex strings as there are only two possible values
+        #The tests below are used if TargetName is the first value in the payload
+        if negotiate_hex[32] == "3":
+            TargetInfo_hex = self._get_valid_av_string(negotiate_hex[-valid_length:], valid_pairs)
+            assert negotiate_hex[0:96] == "4e544c4d53535000020000000c000c0030000000058281000123456789abcdef0000000000000000620062003c000000"
+            assert negotiate_hex[96:] == TargetName_hex + TargetInfo_hex
+        #The tests below are used if TargetInfo is the first value in the payload
+        elif negotiate_hex[32] == "9":
+            valid_length += len(TargetName_hex)
+            TargetInfo_hex = self._get_valid_av_string(negotiate_hex[-valid_length:-len(TargetName_hex)], valid_pairs)
+            assert negotiate_hex[0:96] == "4e544c4d53535000020000000c000c0092000000058281000123456789abcdef00000000000000006200620030000000"
+            assert negotiate_hex[96:] == TargetInfo_hex + TargetName_hex
+        else:
+            #The value must be invalid, since neither of the two possiblities above could be identified
+            assert False
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
