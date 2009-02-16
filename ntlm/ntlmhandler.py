@@ -201,18 +201,18 @@ class BaseHandler(object):
 	    else:
 		raise NTLM_Exception("Could not set NTLM_NEGOTIATE_OEM or NTLMSSP_NEGOTIATE_UNICODE flags")
 
-	#Ready to create the negotiate message
-	negotiate_message = ntlm2.NTLMMessage()
-	negotiate_message.Header.Signature = ntlm2.NTLM_PROTOCOL_SIGNATURE
-        negotiate_message.Header.MessageType = ntlm2.NTLM_MESSAGE_TYPE.NtLmNegotiate.const
-
 	if workstation is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
-	    negotiate_message.set_string_field("Workstation", workstation)
+	else:
+	    workstation = None
 
 	if domain is not None and self.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED
-	    negotiate_message.set_string_field("DomainName", domain)
+	else:
+	    domain = None
+
+	#Ready to create the negotiate message
+	negotiate_message = ntlm2.NTLMNegotiateMessage(NegFlg, domain, workstation)
 
 	#Prepare values for OS version information
 	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
@@ -220,9 +220,8 @@ class BaseHandler(object):
 		negotiate_message._add_version_information()
 	    except:
 		#TODO - log a warning - The version info could not be supplied
-		NegFlg = NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION
+		negotiate_message.set_negotiate_flags(NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION)
 
-	negotiate_message.set_negotiate_flags(NegFlg)
 	return negotiate_message.get_message_contents()
 
     def _get_challenge_flags(self, ClientFlg, CfgFlg):
@@ -328,20 +327,6 @@ class BaseHandler(object):
 	    #TODO: must return SEC_E_INVALID_TOKEN
 	    raise NotImplementedError("NOT IMPLEMENTED:: Server must return SEC_E_INVALID_TOKEN")
 
-	#Create the default challenge message
-	challenge_message = ntlm2.NTLMChallengeMessage()
-
-	#If NTLMSSP_NEGOTIATE_VERSION is set, add version information
-	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
-	    try:
-		challenge_message._add_version_information()
-	    except:
-		#TODO - log a warning - The version info could not be supplied
-		NegFlg = NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION
-
-	#Add ServerChallenge
-	challenge_message.ServerChallenge = self._get_nonce()
-
 	#Get server details
 	NetBIOS_name = server_object.get_NetBIOS_name()
 	NetBIOS_domain = server_object.get_NetBIOS_domain()
@@ -349,12 +334,15 @@ class BaseHandler(object):
 	DNS_domain = server_object.get_DNS_domain()
 	DNS_forest_name = server_object.get_DNS_forest_name()
 
+	TargetName = None
+	TargetInfo = None
+
 	#If NTLMSSP_REQUEST_TARGET is set in NegFlg, TargetName field MUST be supplied. Set TargetName according to type flags.
 	if NTLM_FLAGS.NTLMSSP_REQUEST_TARGET & NegFlg:
 	    if NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER & NegFlg:
-		challenge_message.TargetName = NetBIOS_name.encode(encoding)
+		TargetName = NetBIOS_name.encode(encoding)
 	    elif NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN & NegFlg:
-		challenge_message.TargetName = NetBIOS_domain.encode(encoding)
+		TargetName = NetBIOS_domain.encode(encoding)
 	    else:
 		raise NTLMException("Found NTLMSSP_REQUEST_TARGET in negotiated flag but could not determine the TargetName type")
 	    #TODO - handle NTLMSSP_TARGET_TYPE_SHARE
@@ -378,9 +366,19 @@ class BaseHandler(object):
 	    if DNS_forest_name and isinstance(DNS_forest_name, basestring):
 		TargetInfo.add_av_pair(AV_TYPES.MsvAvDnsTreeName, DNS_forest_name.encode(self.unicode))
 
-	    challenge_message.TargetInfo = TargetInfo.to_byte_string()
+	    TargetInfo = TargetInfo.to_byte_string()
 
-	challenge_message.set_negotiate_flags(NegFlg)
+	#Create the default challenge message
+	challenge_message = ntlm2.NTLMChallengeMessage(NegFlg, TargetName, self._get_nonce(), TargetInfo)
+
+	#If NTLMSSP_NEGOTIATE_VERSION is set, add version information
+	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
+	    try:
+		challenge_message._add_version_information()
+	    except:
+		#TODO - log a warning - The version info could not be supplied
+		challenge_message.set_negotiate_flags(NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION)
+
 	return challenge_message.get_message_contents()
 
     def create_authenticate_message(self):
