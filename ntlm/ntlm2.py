@@ -19,6 +19,7 @@ def unimplemented(func):
             raise NotImplementedError("%s.%s needs a \"%s\" function"%(inst.__class__.__module__, inst.__class__.__name__, func.__name__))
 
     return wrapper
+
 #-----------------------------------------------------------------------------------------------------------
 
 def desl(k, d):
@@ -36,73 +37,6 @@ def desl(k, d):
     dobj = des.DES(password_hash[14:21])
     res = res + dobj.encrypt(d[0:8])
     return res
-
-#-----------------------------------------------------------------------------------------------
-# ClientInterface - Must be supported by NTLM client implementation
-#-----------------------------------------------------------------------------------------------
-
-class ClientInterface:
-    """Provides access to information about the client machine. All information returned as strings
-       should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
-
-    @unimplemented
-    def get_workstation(self):
-        """Must return None or the client workstation name"""
-
-    @unimplemented
-    def get_domain(self):
-        """Must return None or the client domain name"""
-
-#-----------------------------------------------------------------------------------------------
-# ServerInterface - Must be supported by NTLM server implementation
-#-----------------------------------------------------------------------------------------------
-
-class ServerInterface:
-    """Provides access to information about the server machine. All information returned as strings
-       should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
-
-    @unimplemented
-    def negotiated_security_ok(self, NegFlg):
-	"""Must check that NegFlg meets the required security settings. See [MS-NLMP] page 51"""
-
-    @unimplemented
-    def get_NetBIOS_name(self):
-        """Must return None or the NetBIOS name of the server"""
-
-    @unimplemented
-    def get_NetBIOS_domain(self):
-        """Must return None or the NetBIOS domain name of the server"""
-
-    @unimplemented
-    def get_DNS_name(self):
-        """Must return None or the server's Active Directory DNS computer name."""
-
-    @unimplemented
-    def get_DNS_domain(self):
-        """Must return None or the server's Active Directory DNS domain name."""
-
-    @unimplemented
-    def get_DNS_forest_name(self):
-        """Must return None or the server's Active Directory DNS forest tree name."""
-
-#-----------------------------------------------------------------------------------------------
-# ResponseData
-#-----------------------------------------------------------------------------------------------
-
-class ResponseData:
-    def __init__(self, ResponseKeyNT, ResponseKeyLM, NTChallengeResponse=None, LmChallengeResponse=None, SessionBaseKey=None):
-	self.ResponseKeyNT = ResponseKeyNT
-	self.ResponseKeyLM = ResponseKeyLM
-	self.NTChallengeResponse = NTChallengeResponse
-	self.LmChallengeResponse = LmChallengeResponse
-	self.SessionBaseKey = SessionBaseKey
-
-#-----------------------------------------------------------------------------------------------
-# NTLM_Exception
-#-----------------------------------------------------------------------------------------------
-
-class NTLM_Exception(Exception):
-    pass
 
 #-----------------------------------------------------------------------------------------------
 # FileStructure
@@ -380,6 +314,7 @@ class NTLMMessageNegotiateFields(NTLMMessageDependentFieldsHandler):
     _fields_ = [("NegotiateFlags", ctypes.c_uint32),
                 ("DomainName", StringHeader),
                 ("Workstation", StringHeader),
+                #TODO - Version should be here, shouldn't it?
                ]
 
 #-----------------------------------------------------------------------------------------------
@@ -393,6 +328,7 @@ class NTLMMessageChallengeFields(NTLMMessageDependentFieldsHandler):
                 ("ServerChallenge", ctypes.c_uint8 * 8),
                 ("Reserved", ctypes.c_uint8 * 8),
                 ("TargetInfo", StringHeader),
+                #TODO - Version should be here, shouldn't it?
                ]
 
 #-----------------------------------------------------------------------------------------------
@@ -408,6 +344,8 @@ class NTLMMessageAuthenticateFields(NTLMMessageDependentFieldsHandler):
                 ("Workstation", StringHeader),
                 ("EncryptedRandomSessionKey", StringHeader),
                 ("NegotiateFlags", ctypes.c_uint32),
+                #TODO - Version should be here, shouldn't it?
+                #TODO - MIC should be here, shouldn't it?
                ]
 
 #-----------------------------------------------------------------------------------------------
@@ -478,42 +416,34 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
     unicode = 'utf-16le'
     oem = 'utf-16le'	    #In the case of client and server communications, client and server must agree on a shared oem character set
                             #By default, just use unicode
-    unsupported_flags = 0   #Set bits on this property to indicate which flags are unsupported
-
-    #List of flags that do not have to be supported
-    optional_flags = (NTLM_FLAGS.NTLMSSP_NEGOTIATE_56 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128
-		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION | NTLM_FLAGS.NTLMSSP_REQUEST_NON_NT_SESSION_KEY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY
-		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
-		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NT_ONLY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY
-		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN
-		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM)
-
-    @classmethod
-    def supported_flags(cls, flags):
-	"""Function filters out any flags not supported by client/server"""
-	temp = flags | cls.unsupported_flags
-	return temp ^ cls.unsupported_flags
-
-    @classmethod
-    def _get_nonce(cls):
-	result = ""
-	for i in xrange(8):
-	    result += chr(random.getrandbits(8))
-	return result
-
     @classmethod
     def read(cls, f, size=None):
         header = NTLMMessageHeader.read(f)
         if header.MessageType == NTLM_MESSAGE_TYPE.NtLmNegotiate.const:
-            message = NTLMNegotiateMessage()
+            if issubclass(cls, NTLMMessage) and cls.version()==2:
+                message = NTLMNegotiateMessageV2()
+            else:
+                message = NTLMNegotiateMessageV1()
         elif header.MessageType == NTLM_MESSAGE_TYPE.NtLmChallenge.const:
-            message = NTLMChallengeMessage()
+            if issubclass(cls, NTLMMessage) and cls.version()==2:
+                message = NTLMChallengeMessageV2()
+            else:
+                message = NTLMChallengeMessageV1()
+        elif header.MessageType == NTLM_MESSAGE_TYPE.NtLmAuthenticate.const:
+            if issubclass(cls, NTLMMessage) and cls.version()==2:
+                message = NTLMAuthenticateMessageV2()
+            else:
+                message = NTLMAuthenticateMessageV1()
         else:
             message = cls()
         message.Header = header
         message.MessageDependentFields = NTLMMessageDependentFields.read(f, MessageType=header.MessageType)
         message.payload = message.MessageFields.read_payload(f)
         return message
+
+    @classmethod
+    def version(cls):
+        return 1
 
     def get_message_fields(self):
         """Returns the fields appropriate to the MessageType"""
@@ -768,12 +698,294 @@ class FlagProperty(property):
         property.__init__(self, fget, fset, fdel)
 
 #-----------------------------------------------------------------------------------------------
-# NTLMNegotiateMessage
+# Exceptions
 #-----------------------------------------------------------------------------------------------
 
-class NTLMNegotiateMessage(NTLMMessage):
+class NTLM_Exception(Exception):
+    """Raises NTLM related exceptions which have no specified windows error value"""
+    SECURITY_WEAK = 1
+    UNSUPPORTED_FLAG = 2
+    TARGETNAME_CONFLICT = 3
+    INVALID_CLIENT_FLAGS = 4
+    INVALID_SERVER_FLAGS = 5
+
+    def __init__(self, msg, id=None):
+        super(NTLM_Exception, self).__init__(msg)
+        self.id = id
+
+class WinError(Exception):
+    """Raises exceptions with the appropriate error ids where windows error ids are required"""
+    #The values below are the windows errors that may be raised by NTLM messages. Numeric values below were taken from [MS-ERREF].pdf
+    STATUS_NTLM_BLOCKED = 0xC0000418
+    SEC_E_UNSUPPORTED_FUNCTION = 0x80090302
+    SEC_E_INVALID_TOKEN = 0x80090308
+
+    def __init__(self, msg, id):
+        super(WinError, self).__init__(msg)
+        self.id = id
+
+#-----------------------------------------------------------------------------------------------
+# NTLMInterface
+#-----------------------------------------------------------------------------------------------
+
+class NTLMInterface(object):
+    class SessionKeys:
+        def __init__(self, client_sign, client_seal, server_sign, server_seal):
+            self.client_sign = client_sign
+            self.client_seal = client_seal
+            self.server_sign = server_sign
+            self.server_seal = server_seal
+
+    #List of flags that do not have to be supported
+    optional_flags = (NTLM_FLAGS.NTLMSSP_NEGOTIATE_56 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128
+		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION | NTLM_FLAGS.NTLMSSP_REQUEST_NON_NT_SESSION_KEY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY
+		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
+		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NT_ONLY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY
+		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN
+		     |NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM)
+
+    def __init__(self, unsupported_flags=0):
+        #Set bits on this property to indicate which flags are unsupported
+        self._unsupported_flags = unsupported_flags & self.optional_flags
+
+    def supported_flags(self, flags):
+	"""Function filters out any flags not supported by client/server"""
+	temp = flags | self._unsupported_flags
+	return temp ^ self._unsupported_flags
+
+    @unimplemented
+    def negotiated_security_ok(self, NegFlg):
+	"""Must check that NegFlg meets the required security settings. See [MS-NLMP] page 51"""
+
+    def _try_request(self, attr_name, value, required_flags):
+        """At the application level, certain general features can be set which change the values of the supported flags.
+           This function provides the basic logic for changing supported flags."""
+        #Values can be modified if value is not None
+        if value is not None:
+            #Mark flags as supported or unsupported
+            self._unsupported_flags = self._unsupported_flags | required_flags
+            if value:
+                self._unsupported_flags = self._unsupported_flags ^ required_flags
+            self.__dict__[attr_name] = bool(value)
+        #If the request is enabled, return the flags required by the request otherwise return 0
+        if self.__dict__[attr_name]:
+            return required_flags
+        return 0
+
+    def request_datagram(self, set_value=None):
+        """Indicates that the connectionless mode of NTLM is to be selected. If the Datagram option is selected by the client,
+           then connectionless mode is used and NTLM performs a bitwise OR operation with the following NTLM Negotiate Flag
+           into the ClientConfigFlags -> NTLMSSP_NEGOTIATE_DATAGRAM"""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_datagram", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM)
+
+    @classmethod
+    def get_timestamp(cls):
+        """Must return a timestamp as a hexidecimal string"""
+        raise NotImplementedError("TODO - implement get_timestamp() as NTLMInterface base class method")
+
+    @classmethod
+    def get_nonce(cls):
+	result = ""
+	for i in xrange(8):
+	    result += chr(random.getrandbits(8))
+	return result
+
+    def max_lifetime(self):
+        """Must return the maximum lifetime for an NTLM challenge response pair in seconds"""
+        #TODO make sure this returns the correct value for various operating systems. Returns 30 minutes for now.
+        #see [MS_NLMP] page 40 and see [MS_NLMP] page 84 <34>
+        #In Windows NT 4.0 and Windows 2000, the maximum lifetime for the challenge is 30 minutes.
+        #In Windows XP, Windows Server 2003, Windows Vista, Windows Server 2008 and Windows 7, the maximum lifetime is 36 hours.
+        return 1800
+
+    def require_128bit_encryption(self):
+        #TODO - Should be able to implement Require128bitEncryption() in this base class - see [MS_NLMP] page 84 <33>
+        #  In Windows NT, Windows 2000, Windows XP, Windows Server 2003, Windows Vista, and Windows Server 2008 this variable is set to FALSE.
+        #  In Windows 7, this variable is set to TRUE.
+        return False #TODO this should return True in Windows 7 - see [MS_NLMP] page 84 <33>
+
+    def create_session_keys(self, responsedata):
+        """This method must be called by the client and server after authentication in order to generate the session keys"""
+        #TODO implement this function
+        client_sign = client_seal = server_sign = server_seal = None
+        #Pseudo-code for client key calculation - See [MS-NLMP] page 46
+        """Set KeyExchangeKey to KXKEY(SessionBaseKey, LmChallengeResponse)
+        If (NTLMSSP_NEGOTIATE_KEY_EXCH bit is set in CHALLENGE_MESSAGE.NegotiateFlags )
+            Set ExportedSessionKey to NONCE(16)
+            Set AUTHENTICATE_MESSAGE.EncryptedRandomSessionKey to RC4K(KeyExchangeKey, ExportedSessionKey)
+        Else
+            Set ExportedSessionKey to KeyExchangeKey
+            Set AUTHENTICATE_MESSAGE.EncryptedRandomSessionKey to NIL
+        Endif
+
+        Set ClientSigningKey to SIGNKEY(ExportedSessionKey, "Client")
+        Set ServerSigningKey to SIGNKEY(ExportedSessionKey, "Server")
+        Set ClientSealingKey to SEALKEY(NegFlg, ExportedSessionKey, "Client")
+        Set ServerSealingKey to SEALKEY(NegFlg, ExportedSessionKey, "Server")
+        RC4Init(ClientHandle, ClientSealingKey) RC4Init(ServerHandle, ServerSealingKey)"""
+        return self.SessionKeys(client_sign, client_seal, server_sign, server_seal)
+
+#-----------------------------------------------------------------------------------------------
+# ClientInterface - Must be supported by NTLM client implementation
+#-----------------------------------------------------------------------------------------------
+
+class ClientInterface(NTLMInterface):
+    """Provides access to information about the client machine. All information returned as strings
+       should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
+    def __init__(self, unsupported_flags=0):
+        super(ClientInterface,self).__init__(unsupported_flags)
+        self.request_integrity(False)
+        self.request_replay_detect(False)
+        self.request_sequence_detect(False)
+        self.request_confidentiality(False)
+        self.request_datagram(False)
+        self.request_identify(False)
+        self._config_flags = NTLMNegotiateMessageBase.DEFAULT_FLAGS
+
+    @unimplemented
+    def get_workstation(self):
+        """Must return None or the client workstation name"""
+
+    @unimplemented
+    def get_domain(self):
+        """Must return None or the client domain name"""
+
+    @unimplemented
+    def get_user_name(self):
+        """Must return a string containing the user's name"""
+
+    @unimplemented
+    def get_user_password(self):
+        """Must return a string containing the user's password for the purposes of authentication."""
+
+    def client_supplied_target_name(self):
+        """Service principal name (SPN) of the service that the client wishes to authenticate to. This value is optional."""
+        return None
+
+    def client_channel_bindings_unhashed(self):
+        """The gss_channel_bindings_struct ([RFC2744] section 3.11). This value is optional."""
+        return None
+
+    def set_config_flags(self, flags):
+        self._config_flags = flags
+
+    def get_config_flags(self):
+        """Returns flags representing the capabilities of the client"""
+        return self.supported_flags(self._config_flags |
+                                    NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN |
+                                    NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM |
+                                    self.request_confidentiality() |
+                                    self.request_datagram() |
+                                    self.request_identify())
+
+    def blocked(self, servername=None):
+        """Must return False if the client may send NTLM Authentication messages to the server of the given name. Returns True otherwise."""
+        #The default value of this state variable is FALSE. This state variable is supported in Windows 7 - see [MS_NLMP] page 84 <31>
+        #Windows 7 also supports a list of "ClientBlockExceptions" see [MS_NLMP] page 40 and see [MS_NLMP] page 84 <32>
+        #TODO - Add support for the "ClientBlockExceptions" property under Windows 7
+        return False
+
+    #The values below can be set at the Application level and will result in various negotiate flags being set
+    def request_integrity(self, set_value=None):
+        """results in the NTLMSSP_NEGOTIATE_SIGN flag being set in the NegotiateFlags field of the NTLM NEGOTIATE_MESSAGE"""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_integrity", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN)
+
+    def request_replay_detect(self, set_value=None):
+        """results in the NTLMSSP_NEGOTIATE_SIGN flag being set in the NegotiateFlags field of the NTLM NEGOTIATE_MESSAGE"""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_replay_detect", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN)
+
+    def request_sequence_detect(self, set_value=None):
+        """results in the NTLMSSP_NEGOTIATE_SIGN flag being set in the NegotiateFlags field of the NTLM NEGOTIATE_MESSAGE"""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_sequence_detect", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN)
+
+    def request_confidentiality(self, set_value=None):
+        """If the Confidentiality option is selected by the client, NTLM performs a bitwise OR operation with the following NTLM Negotiate Flags into the ClientConfigFlags
+           NTLMSSP_NEGOTIATE_SEAL | NTLMSSP_NEGOTIATE_KEY_EXCH | NTLMSSP_NEGOTIATE_LM_KEY | NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY"""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_confidentiality", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY)
+
+    def request_identify(self, set_value=None):
+        """Indicates that the caller wants the server to know the identity of the caller, but that the server not be allowed to impersonate
+           the caller to resources on that system. Setting this flag results in the NTLMSSP_NEGOTIATE_IDENTIFY flag being set. Indicates
+           that the GSS_C_IDENTIFY_FLAG flag was set in the GSS_Init_sec_context call, as discussed in [RFC4757] section 7.1, and results
+           in the GSS_C_IDENTIFY_FLAG flag set in the authenticator's checksum field ([RFC4757] section 7.1)."""
+        #_try_request will return 0 if this setting is disabled. It returns the required flags is this setting is enabled.
+        return self._try_request("_request_identify", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY)
+
+#-----------------------------------------------------------------------------------------------
+# ServerInterface - Must be supported by NTLM server implementation
+#-----------------------------------------------------------------------------------------------
+
+class ServerInterface(NTLMInterface):
+    """Provides access to information about the server machine. All information returned as strings
+       should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
+    def __init__(self, unsupported_flags=0):
+        super(ServerInterface,self).__init__(unsupported_flags)
+        self.request_datagram(False)
+        self._config_flags = NTLMChallengeMessageBase.DEFAULT_FLAGS
+
+    @unimplemented
+    def domain_joined(self):
+        """From [MS-NLMP] page 52. Should presumably return true if the server is joined to a domain"""
+
+    @unimplemented
+    def get_NetBIOS_name(self):
+        """Must return None or the NetBIOS name of the server"""
+
+    @unimplemented
+    def get_NetBIOS_domain(self):
+        """Must return None or the NetBIOS domain name of the server"""
+
+    @unimplemented
+    def get_DNS_name(self):
+        """Must return None or the server's Active Directory DNS computer name."""
+
+    @unimplemented
+    def get_DNS_domain(self):
+        """Must return None or the server's Active Directory DNS domain name."""
+
+    @unimplemented
+    def get_DNS_forest_name(self):
+        """Must return None or the server's Active Directory DNS forest tree name."""
+
+    @unimplemented
+    def client_supplied_target_name(self):
+        """Service principal name (SPN) of the service that the client wishes to authenticate to. This value is optional."""
+
+    @unimplemented
+    def server_channel_bindings_unhashed(self):
+        """The gss_channel_bindings_struct ([RFC2744] section 3.11). This value is supplied by the application and used by the protocol.
+           This value is optional."""
+
+    def application_requires_CBT(self):
+        """A Boolean setting from the application requiring channel binding."""
+        return False
+
+    def set_config_flags(self, flags):
+        self._config_flags = flags
+
+    def get_config_flags(self):
+        """Returns flags representing the capabilities of the client"""
+        return self.supported_flags(self._config_flags |
+                                    NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN |
+                                    NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM |
+                                    NTLM_FLAGS.NTLMSSP_REQUEST_TARGET |
+                                    self.request_datagram())
+
+    def blocked(self):
+        return False
+
+#-----------------------------------------------------------------------------------------------
+# NTLMNegotiateMessageBase
+#-----------------------------------------------------------------------------------------------
+
+class NTLMNegotiateMessageBase(NTLMMessage):
     """NTLM Negotiate Message"""
-    DEFAULT_FLAGS = NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE
+    DEFAULT_FLAGS = NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET
     def __init__(self, NegFlg=None, DomainName=None, Workstation=None):
         """Constructs a new NTLM Negotiate Message"""
         self.Header.Signature = NTLM_PROTOCOL_SIGNATURE
@@ -786,7 +998,7 @@ class NTLMNegotiateMessage(NTLMMessage):
         self.Workstation = Workstation
 
     @classmethod
-    def create(cls, NegFlg, client_object):
+    def create(cls, NegFlg, client_object, target_server=""):
         """Returns an NTLM negotiate message
 	    NegFlg 		- If this value is not None, overwrite the default flags
 	    client_object	- An object which implements ClientInterface. It should provide the folowing information:
@@ -796,6 +1008,9 @@ class NTLMNegotiateMessage(NTLMMessage):
 	if not isinstance(client_object, ClientInterface):
 	    raise NTLMException("The 'client_object' argument passed to 'create_negotiate_message' must be of type 'ClientInterface'")
 
+        if client_object.blocked(target_server):
+            raise WinError("The client is blocked from sending NTLM Authentication messages to server '%s'"%target_server, WinError.STATUS_NTLM_BLOCKED)
+
 	domain = client_object.get_domain()
 	workstation = client_object.get_workstation()
 
@@ -803,10 +1018,12 @@ class NTLMNegotiateMessage(NTLMMessage):
 	    NegFlg = cls.DEFAULT_FLAGS
 
 	#Negotiate message MUST set these flags - [MS-NLMP] pages 33 and 34
-	NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM
+	NegFlg = NegFlg | client_object.get_config_flags()
+        #Must also add any flags required by the client settings
+        NegFlg = NegFlg | client_object.request_integrity() | client_object.request_replay_detect() | client_object.request_sequence_detect()
 
 	#Filter the Negotiate Flags down to those which are actually supported. By default all flags are supported.
-	NegFlg = cls.supported_flags(NegFlg)
+	NegFlg = client_object.supported_flags(NegFlg)
 
 	#Set any flags which are required by current flags. Eg Setting NTLMSSP_NEGOTIATE_SEAL requires that NTLMSSP_NEGOTIATE_56
 	#gets set if it is supported. For now, just set all required flags and remove all unsupported flags later.
@@ -814,24 +1031,29 @@ class NTLMNegotiateMessage(NTLMMessage):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_56
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128
 
+        #If there is no LM authentication request, see if NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY can be configured
+        #It will be switched off if it is not supported
+        if not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY:
+            NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
+
 	#Additional flags may have been added. Filter the Negotiate Flags down to those which are actually supported.
-	NegFlg = cls.supported_flags(NegFlg)
+	NegFlg = client_object.supported_flags(NegFlg)
 
 	#Check that a choice of encoding can still be negotiated.
 	if not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE:
-	    if cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE):
+	    if client_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE):
 		NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE
-	    elif cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM):
+	    elif client_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM):
 		NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM
 	    else:
-		raise NTLM_Exception("Could not set NTLM_NEGOTIATE_OEM or NTLMSSP_NEGOTIATE_UNICODE flags")
+		raise NTLM_Exception("Could not set NTLM_NEGOTIATE_OEM or NTLMSSP_NEGOTIATE_UNICODE flags", NTLM_Exception.INVALID_CLIENT_FLAGS)
 
-	if workstation is not None and cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED):
+	if workstation is not None and client_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
 	else:
 	    workstation = None
 
-	if domain is not None and cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED):
+	if domain is not None and client_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED):
 	    NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED
 	else:
 	    domain = None
@@ -843,6 +1065,11 @@ class NTLMNegotiateMessage(NTLMMessage):
 	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
 	    try:
 		negotiate_message._add_version_information()
+                #If the version information gets set, then the workstation and domain names must be ""
+                if negotiate_message.DomainName:
+                    negotiate_message.DomainName = ""
+                if negotiate_message.Workstation:
+                    negotiate_message.Workstation = ""
 	    except:
 		#TODO - log a warning - The version info could not be supplied
 		negotiate_message.set_negotiate_flags(NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION)
@@ -852,11 +1079,17 @@ class NTLMNegotiateMessage(NTLMMessage):
     DomainName = StringPropertyWithFlag("DomainName", NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED)
     Workstation = StringPropertyWithFlag("Workstation", NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED)
 
+class NTLMNegotiateMessageV1(NTLMNegotiateMessageBase):
+    pass
+class NTLMNegotiateMessageV2(NTLMNegotiateMessageBase):
+    @classmethod
+    def version(cls):
+        return 2
 #-----------------------------------------------------------------------------------------------
-# NTLMChallengeMessage
+# NTLMChallengeMessageBase
 #-----------------------------------------------------------------------------------------------
 
-class NTLMChallengeMessage(NTLMMessage):
+class NTLMChallengeMessageBase(NTLMMessage):
     """NTLM Challenge Message"""
     DEFAULT_FLAGS = NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE
     def __init__(self, NegFlg=None, TargetName=None, ServerChallenge=None, TargetInfo=None):
@@ -872,7 +1105,7 @@ class NTLMChallengeMessage(NTLMMessage):
         self.TargetInfo = TargetInfo
 
     @classmethod
-    def _get_challenge_flags(cls, ClientFlg, CfgFlg):
+    def _get_challenge_flags(cls, ClientFlg, CfgFlg, server_object):
 	"""Checks for specific flags in the client request. See [MS-NLMP] page 32-34 for more details
 	    ClientFlg 		- If this value is not None, overwrite the default flags. This argument should contain the flags set by
 				  the client negotiate message.
@@ -882,11 +1115,11 @@ class NTLMChallengeMessage(NTLMMessage):
 	    CfgFlg = cls.DEFAULT_FLAGS
 
 	if ClientFlg is None:
-	    raise NTLM_Exception("Challenge message could not be created as no negotiate flags were set.")
-	validClientFlags = cls.supported_flags(ClientFlg)
+	    raise NTLM_Exception("Challenge message could not be created as no negotiate flags were set.", NTLM_Exception.INVALID_CLIENT_FLAGS)
+	validClientFlags = server_object.supported_flags(ClientFlg)
 
 	#Set flags which MUST be set
-	CfgFlg = cls.supported_flags(CfgFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_ALWAYS_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET)
+	CfgFlg = server_object.supported_flags(CfgFlg) | server_object.get_config_flags()
 
 	#Handle mutually exclusive flags
 	TargetName_options = NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SHARE | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN
@@ -894,7 +1127,7 @@ class NTLMChallengeMessage(NTLMMessage):
 	#If selected_option is non-zero and not equal to exaclty one option, then multiple options must have been set
 	if selected_option and selected_option not in (NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SHARE, NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER,
 						       NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN):
-	    raise NTLM_Exception("Challenge message could not be created as conflicting TargetName types were requested.")
+	    raise NTLM_Exception("Challenge message could not be created as conflicting TargetName types were requested.", NTLM_Exception.INVALID_SERVER_FLAGS)
 
 #TODO:: In the list below I have marked some items with a ?. This is because I'm not 100% clear on the specified behaviour
 #In these cases, I've done what seems most sensible but this should be checked none the less.
@@ -933,39 +1166,39 @@ class NTLMChallengeMessage(NTLMMessage):
 	]
 
 	for AddFlagName, MustAddCondition, SetAnyway in flags_to_check:
-	    CfgFlg = CfgFlg | cls._add_flag_if_required(ClientFlg, AddFlagName, MustAddCondition, SetAnyway)
+	    CfgFlg = CfgFlg | cls._add_flag_if_required(ClientFlg, server_object, AddFlagName, MustAddCondition, SetAnyway)
 
 	#setting NTLMSSP_NEGOTIATE_SEAL should result in setting NTLMSSP_NEGOTIATE_56 and NTLMSSP_NEGOTIATE_128 (if they are supported)
 	if CfgFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL:
-	    CfgFlg = CfgFlg | cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_56 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128)
+	    CfgFlg = CfgFlg | server_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_56 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_128)
 
 	#If NTLMSSP_NEGOTIATE_DATAGRAM is set, then NTLMSSP_NEGOTIATE_KEY_EXCHANGE MUST be set
 	if CfgFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM:
-	    if not cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE):
-		raise NTLM_Exception("NTLM message could not set required flag 'NTLMSSP_NEGOTIATE_KEY_EXCHANGE'. The flag is not supported.")
+	    if not server_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE):
+		raise NTLM_Exception("NTLM message could not set required flag 'NTLMSSP_NEGOTIATE_KEY_EXCHANGE'. The flag is not supported.", NTLM_Exception.UNSUPPORTED_FLAG)
 	    CfgFlg = CfgFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE
 
 	#If NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY is set, set NTLMSSP_NEGOTIATE_TARGET_INFO - [MS-NLMP] page 52
 	if CfgFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
-	    if not cls.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO):
-		raise NTLM_Exception("NTLM message could not set required flag 'NTLMSSP_NEGOTIATE_TARGET_INFO'. The flag is not supported.")
+	    if not server_object.supported_flags(NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO):
+		raise NTLM_Exception("NTLM message could not set required flag 'NTLMSSP_NEGOTIATE_TARGET_INFO'. The flag is not supported.", NTLM_Exception.UNSUPPORTED_FLAG)
 	    CfgFlg = CfgFlg | NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO
 
 	return CfgFlg
 
     @classmethod
-    def _add_flag_if_required(cls, ClientFlg, AddFlagName, MustAddCondition=False, SetAnyway=True):
+    def _add_flag_if_required(cls, ClientFlg, server_object, AddFlagName, MustAddCondition=False, SetAnyway=True):
 	AddFlag = getattr(NTLM_FLAGS, AddFlagName)
 	if not ClientFlg & AddFlag:
 	    return 0
 	if MustAddCondition:
-	    if not cls.supported_flags(AddFlag):
+	    if not server_object.supported_flags(AddFlag):
 		#Can't set unsupported flag when the flag MUST be set
-		raise NTLM_Exception("NTLM message could not set required flag '%s'. The flag is not supported."%AddFlagName)
+		raise NTLM_Exception("NTLM message could not set required flag '%s'. The flag is not supported."%AddFlagName, NTLM_Exception.UNSUPPORTED_FLAG)
 	    else:
 		return AddFlag
 	#Even if the flag is not required, it mey get set on request. Usually this is because the flag can be overriden or overrides another flag.
-	elif SetAnyway and cls.supported_flags(AddFlag):
+	elif SetAnyway and server_object.supported_flags(AddFlag):
 	    return AddFlag
 	return 0
 
@@ -979,41 +1212,60 @@ class NTLMChallengeMessage(NTLMMessage):
 	if not isinstance(server_object, ServerInterface):
 	    raise NTLMException("The 'server_object' argument passed to 'create_challenge_message' must be of type 'ServerInterface'")
 
-	NegFlg = cls._get_challenge_flags(ClientFlg, CfgFlg)
+	NegFlg = cls._get_challenge_flags(ClientFlg, CfgFlg, server_object)
+
+        if server_object.blocked():
+            raise WinError("The server is blocked from sending NTLM Authentication messages", WinError.STATUS_NTLM_BLOCKED)
 
 	if not server_object.negotiated_security_ok(NegFlg):
-	    #TODO: must return SEC_E_UNSUPPORTED_FUNCTION
-	    raise NotImplementedError("NOT IMPLEMENTED:: Server must return SEC_E_UNSUPPORTED_FUNCTION")
+	    raise NTLM_Exception("The negotiated security levels are not strong enough the meet the local machine's authorisation policy.", NTLM_Exception.SECURITY_WEAK)
+
+        if server_object.require_128bit_encryption() and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_128:
+	    raise WinError("NTLM negotiate flags do not request 128 bit encryption. The server requires 128 bit encryption", WinError.SEC_E_UNSUPPORTED_FUNCTION)
 
 	#If NTLM_NEGOTIATE_OEM is set in NegFlg, then use OEM encoding. The flag could not have been set if NTLMSSP_NEGOTIATE_UNICODE
 	#was set. If NTLMSSP_NEGOTIATE_UNICODE is set in NegFlg, then use unicode encoding. If neither flag is set, return SEC_E_INVALID_TOKEN
 	encoding = cls.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else cls.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
 	if encoding is None:
-	    #TODO: must return SEC_E_INVALID_TOKEN
-	    raise NotImplementedError("NOT IMPLEMENTED:: Server must return SEC_E_INVALID_TOKEN")
-
-	#Get server details
-	NetBIOS_name = server_object.get_NetBIOS_name()
-	NetBIOS_domain = server_object.get_NetBIOS_domain()
-	DNS_name = server_object.get_DNS_name()
-	DNS_domain = server_object.get_DNS_domain()
-	DNS_forest_name = server_object.get_DNS_forest_name()
+	    raise WinError("NTLM negotiate flags must set a valid text encoding flag. Neither NTLMSSP_NEGOTIATE_UNICODE nor NTLMSSP_NEGOTIATE_OEM was set.", WinError.SEC_E_INVALID_TOKEN)
 
 	TargetName = None
-	TargetInfo = None
-
 	#If NTLMSSP_REQUEST_TARGET is set in NegFlg, TargetName field MUST be supplied. Set TargetName according to type flags.
 	if NTLM_FLAGS.NTLMSSP_REQUEST_TARGET & NegFlg:
-	    if NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER & NegFlg:
-		TargetName = NetBIOS_name.encode(encoding)
-	    elif NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN & NegFlg:
-		TargetName = NetBIOS_domain.encode(encoding)
+	    if server_object.domain_joined():
+                NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN
+		TargetName = server_object.get_NetBIOS_domain().encode(encoding)
 	    else:
-		raise NTLMException("Found NTLMSSP_REQUEST_TARGET in negotiated flag but could not determine the TargetName type")
-	    #TODO - handle NTLMSSP_TARGET_TYPE_SHARE
+                NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER
+		TargetName = server_object.get_NetBIOS_name().encode(encoding)
 
-	#If NTLMSSP_NEGOTIATE_TARGET_INFO is set, add TargetInfo - [MS-NLMP] page 32 & [MS-NLMP] page 52
+        TargetInfo = cls.create_targetinfo(NegFlg, server_object)
+        if TargetInfo:
+            TargetInfo = TargetInfo.to_byte_string()
+
+	#Create the default challenge message
+	challenge_message = cls(NegFlg, TargetName, server_object.get_nonce(), TargetInfo)
+
+	#If NTLMSSP_NEGOTIATE_VERSION is set, add version information
+	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
+	    try:
+		challenge_message._add_version_information()
+	    except:
+		#TODO - log a warning - The version info could not be supplied
+		challenge_message.set_negotiate_flags(NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION)
+
+	return challenge_message
+
+    @classmethod
+    def create_targetinfo(cls, NegFlg, server_object):
+        #If NTLMSSP_NEGOTIATE_TARGET_INFO is set, add TargetInfo - [MS-NLMP] page 32 & [MS-NLMP] page 52
 	if NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO & NegFlg:
+            #Get server details
+            NetBIOS_name = server_object.get_NetBIOS_name()
+            NetBIOS_domain = server_object.get_NetBIOS_domain()
+            DNS_name = server_object.get_DNS_name()
+            DNS_domain = server_object.get_DNS_domain()
+            DNS_forest_name = server_object.get_DNS_forest_name()
 	    TargetInfo = AV_PAIR_Handler()
 
 	    if NetBIOS_name and isinstance(NetBIOS_name, basestring):
@@ -1031,21 +1283,8 @@ class NTLMChallengeMessage(NTLMMessage):
 	    if DNS_forest_name and isinstance(DNS_forest_name, basestring):
 		TargetInfo.add_av_pair(AV_TYPES.MsvAvDnsTreeName, DNS_forest_name.encode(cls.unicode))
 
-	    TargetInfo = TargetInfo.to_byte_string()
-
-	#Create the default challenge message
-	challenge_message = cls(NegFlg, TargetName, cls._get_nonce(), TargetInfo)
-
-	#If NTLMSSP_NEGOTIATE_VERSION is set, add version information
-	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
-	    try:
-		challenge_message._add_version_information()
-	    except:
-		#TODO - log a warning - The version info could not be supplied
-		challenge_message.set_negotiate_flags(NegFlg ^ NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION)
-
-	return challenge_message
-
+	    return TargetInfo
+        return None
 
     TargetName = StringProperty("TargetName")
     ServerChallenge = BinaryProperty("ServerChallenge")
@@ -1053,11 +1292,47 @@ class NTLMChallengeMessage(NTLMMessage):
     TargetInfo = StringPropertyWithFlag("TargetInfo", NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO)
 
 #-----------------------------------------------------------------------------------------------
+# NTLMChallengeMessageV1
+#-----------------------------------------------------------------------------------------------
+
+class NTLMChallengeMessageV1(NTLMChallengeMessageBase):
+    pass
+
+#-----------------------------------------------------------------------------------------------
+# NTLMChallengeMessageV2
+#-----------------------------------------------------------------------------------------------
+
+class NTLMChallengeMessageV2(NTLMChallengeMessageBase):
+    @classmethod
+    def version(cls):
+        return 2
+
+    @classmethod
+    def create_targetinfo(cls, NegFlg, server_object):
+        #The version 2 challenge message should include a timestamp
+        TargetInfo = super(NTLMChallengeMessageV2, cls).create_targetinfo(NegFlg, server_object)
+        timestamp = server_object.get_timestamp()
+        if timestamp:
+            if TargetInfo is None:
+                TargetInfo = AV_PAIR_Handler()
+            TargetInfo.add_av_pair(AV_TYPES.MsvAvTimestamp, timestamp)
+        return TargetInfo
+
+#-----------------------------------------------------------------------------------------------
 # NTLMAuthenticateMessageBase
 #-----------------------------------------------------------------------------------------------
 
 class NTLMAuthenticateMessageBase(NTLMMessage):
     """NTLM Authenticate Message"""
+
+    class ResponseData:
+        def __init__(self, ResponseKeyNT, ResponseKeyLM, NTChallengeResponse=None, LmChallengeResponse=None, SessionBaseKey=None):
+            self.ResponseKeyNT = ResponseKeyNT
+            self.ResponseKeyLM = ResponseKeyLM
+            self.NTChallengeResponse = NTChallengeResponse
+            self.LmChallengeResponse = LmChallengeResponse
+            self.SessionBaseKey = SessionBaseKey
+
     def __init__(self, NegFlg=None, LmChallengeResponse=None, NtChallengeResponse=None, DomainName=None, UserName=None, Workstation=None, EncryptedRandomSessionKey=None):
         """Constructs a new NTLM Challenge Message"""
         self.Header.Signature = NTLM_PROTOCOL_SIGNATURE
@@ -1072,8 +1347,92 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
         self.EncryptedRandomSessionKey = EncryptedRandomSessionKey
 
     @classmethod
-    def create(cls, NegFlg, client_object):
-        """TODO - Implement this"""
+    def create(cls, client_object, challenge_message, neg_message=None):
+        """Call this method to create an Authentication message to send to the server"""
+	if not isinstance(client_object, ClientInterface):
+	    raise NTLMException("The 'client_object' argument passed to 'NTLMAuthenticateMessageBase.create' must be of type 'ClientInterface'")
+
+        NegFlg = challenge_message.MessageFields.NegotiateFlags
+
+	if not client_object.negotiated_security_ok(NegFlg):
+	    raise NTLM_Exception("The negotiated security levels are not strong enough the meet the local machine's authorisation policy.", NTLM_Exception.SECURITY_WEAK)
+
+        if client_object.require_128bit_encryption() and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_128:
+	    raise WinError("NTLM negotiate flags do not request 128 bit encryption. The client requires 128 bit encryption", WinError.SEC_E_UNSUPPORTED_FUNCTION)
+
+        #if NTLMSSP_NEGOTIATE_DATAGRAM is set, then NTLMSSP_NEGOTIATE_KEY_EXCH MUST always be set
+        if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE:
+            raise NTLM_Exception("Challenge message negotiate flags contain NTLMSSP_NEGOTIATE_DATAGRAM but not NTLMSSP_NEGOTIATE_KEY_EXCH", NTLM_Exception.INVALID_SERVER_FLAGS)
+
+        #Copy AV_PAIRS from challenge message to a dictionary
+        AVHandler = AV_PAIR_Handler(challenge_message.TargetInfo)
+        av_pair_dict = {}
+        for pair in AVHandler.get_av_pairs():
+            av_pair_dict[pair.Header.AvId] = pair.value_byte_string()
+
+        #AUTHENTICATE_MESSAGE ... where all strings are encoded as RPC_UNICODE_STRING [MS-NLMP] page 44
+        encoding = cls.unicode
+        domain = client_object.get_domain()
+        user_name = client_object.get_user_name()
+        server_NETBIOS_name = av_pair_dict.get(AV_TYPES.MsvAvNbComputerName, None)
+        server_challenge = "".join([chr(x) for x in challenge_message.ServerChallenge])
+        timestamp = None
+        if isinstance(challenge_message, NTLMChallengeMessageV2) and av_pair_dict.has_key(AV_TYPES.MsvAvTimestamp):
+            timestamp = av_pair_dict[AV_TYPES.MsvAvTimestamp]
+        else:
+            timestamp = client_object.get_timestamp()
+
+        #The values below are optional and might not be supplied by the ClientInterface implementation
+        client_target_name = client_object.client_supplied_target_name()
+        client_binding = client_object.client_channel_bindings_unhashed()
+
+        #TODO - certain servers support the presence of the MIC field. Although this field is not required is should be supported
+        #authenticate_mic
+
+        responsedata = cls.compute_response(NegFlg,                             #Flags
+                                            client_object.get_user_password(),  #Password
+                                            user_name,                          #User name
+                                            domain,                             #Domain
+                                            server_challenge,                   #Server Challenge
+                                            client_object.get_nonce(),          #Client Challenge
+                                            timestamp,                          #Time
+                                            challenge_message.TargetInfo,       #Target Info
+                                            encoding)                           #Encoding
+
+        authenticate_message = cls()
+        authenticate_message.set_negotiate_flags(NegFlg)
+
+        #[MS-NLMP] page 45
+        #If NTLM v2 authentication is used and the CHALLENGE_MESSAGE contains a TargetInfo field, the
+        #client SHOULD NOT send the LmChallengeResponse and SHOULD set the LmChallengeResponseLen
+        #and LmChallengeResponseMaxLen fields in the AUTHENTICATE_MESSAGE to zero.
+        if not isinstance(authenticate_message, NTLMAuthenticateMessageV2) or not challenge_message.TargetInfo:
+            authenticate_message.LmChallengeResponse = responsedata.LmChallengeResponse
+        authenticate_message.NtChallengeResponse = responsedata.NTChallengeResponse
+        if domain:
+            authenticate_message.DomainName = domain.encode(encoding)
+        if user_name:
+            authenticate_message.UserName = user_name.encode(encoding)
+        if server_NETBIOS_name:
+            authenticate_message.Workstation = server_NETBIOS_name #Server name is already encoded
+
+        #If the NTLMSSP_NEGOTIATE_VERSION flag is set by the client application, the Version field MUST be set to the current version
+        #(section 2.2.2.10), and the Workstation field MUST be set to NbMachineName.
+        if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
+            if not server_NETBIOS_name:
+                raise NTLM_Exception("NTLMSSP_NEGOTIATE_VERSION flag requires a valid Workstation name but Workstation name cannot be established.", NTLM_Exception.UNSUPPORTED_FLAG)
+            try:
+		authenticate_message._add_version_information()
+	    except:
+		raise NTLM_Exception("NTLMSSP_NEGOTIATE_VERSION flag requires valid Version information but this information cannot be established.", NTLM_Exception.UNSUPPORTED_FLAG)
+
+        #TODO -
+        #Set MIC to HMAC_MD5(ExportedSessionKey, ConcatenationOf( NEGOTIATE_MESSAGE, CHALLENGE_MESSAGE, AUTHENTICATE_MESSAGE_MIC0))
+        #A MIC SHOULD be present when a CHALLENGE_MESSAGE TargetInfo field (section 2.2.1.2) has a MsvAvTimestamp present.
+        #The Client MUST set the AV_PAIR structure (section 2.2.2.1) AvId field to MsvAvFlags and the Value field bit 0x2 to 1
+        #in the AUTHENTICATE_MESSAGE from the client when providing a MIC.
+
+        return authenticate_message, responsedata
 
     @classmethod
     @unimplemented
@@ -1140,15 +1499,12 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 	ResponseKeyLM = cls.create_LM_hashed_password(password, user, domain, encoding)
 	NTChallengeResponse=None
 	LmChallengeResponse=None
-	#TODO - the string below contains the logic for LM Authentication but it is not clear whether NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY
-	#means that LM Authentication is being used. Determine whether or not this code is correct
-	"""if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+	#NTLMSSP_NEGOTIATE_LM_KEY and NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY are mutually exclusive but in case there is an error
+        #and both are present, make sure that NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY gets priority
+	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY and not NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
 	    #Leave NTChallengeResponse=None
-	    #TODO - make sure that NtChallengeResponseLen, NtChallengeResponseMaxLen and NtChallengeResponseBufferOffset are set to 0
-	    #by the calling function
 	    LmChallengeResponse = desl(ResponseKeyLM, ServerChallenge)
-	elif NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:"""
-	if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+	elif NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
 	    challenge = hashlib.md5(ServerChallenge+ClientChallenge).digest()
 	    NTChallengeResponse = desl(ResponseKeyNT, challenge[0:8])
 	    LmChallengeResponse = ClientChallenge + '\0' * 16
@@ -1160,7 +1516,7 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 	    else:
 		LmChallengeResponse = desl(ResponseKeyLM, ServerChallenge)
 
-	return ResponseData(ResponseKeyNT,
+	return cls.ResponseData(ResponseKeyNT,
 			    ResponseKeyLM,
 			    NTChallengeResponse,
 			    LmChallengeResponse,
@@ -1171,6 +1527,9 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 #-----------------------------------------------------------------------------------------------
 
 class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
+    @classmethod
+    def version(cls):
+        return 2
 
     @classmethod
     def create_LM_hashed_password(cls, password, user, domain, encoding):
@@ -1188,7 +1547,6 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 	NTChallengeResponse=None
 	LmChallengeResponse=None
 
-	#TODO get proper values for the hardcoded values Responserversion and HiResponserversion
 	HiResponserversion = Responserversion = "\x01"
 	temp = cls._temp(Responserversion, HiResponserversion, Time, ClientChallenge, ServerName)
 
@@ -1196,10 +1554,9 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 	SessionBaseKey = hmac.new(ResponseKeyNT, NTProofStr).digest()
 
 	NTChallengeResponse = NTProofStr + temp
-	LmChallengeResponse = hmac.new(ResponseKeyLM, ServerChallenge + ClientChallenge).digest() + ClientChallenge
+        LmChallengeResponse = hmac.new(ResponseKeyLM, ServerChallenge + ClientChallenge).digest() + ClientChallenge
 
-
-	return ResponseData(ResponseKeyNT,
+	return cls.ResponseData(ResponseKeyNT,
 			    ResponseKeyLM,
 			    NTChallengeResponse,
 			    LmChallengeResponse,

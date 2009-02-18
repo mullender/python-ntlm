@@ -14,29 +14,28 @@ class SysCheat:
 
 ntlm2.sys=SysCheat()
 
-def make_test_class(aclass):
-    class testclass(aclass):
-        randomvalue = 0
-        @classmethod
-        def _get_nonce(cls):
-            return cls.randomvalue
-    return testclass
-
-
-NTLMNegotiateMessageTester = make_test_class(ntlm2.NTLMNegotiateMessage)
-NTLMChallengeMessageTester = make_test_class(ntlm2.NTLMChallengeMessage)
-NTLMAuthenticateMessageV1Tester = make_test_class(ntlm2.NTLMAuthenticateMessageV1)
-NTLMAuthenticateMessageV2Tester = make_test_class(ntlm2.NTLMAuthenticateMessageV2)
-
-
-
 class ATestServer(ntlm2.ServerInterface):
-    def __init__(self, nb_n, nb_d, dns_n, dns_d, f_n):
+    randomvalue = 0
+    timestamp = 0
+
+    def __init__(self, nb_n, nb_d, dns_n, dns_d, f_n, unsupported_flags=0):
+        super(ATestServer,self).__init__(unsupported_flags)
         self.netbios_name = nb_n
         self.netbios_domain = nb_d
         self.dns_name = dns_n
         self.dns_domain = dns_d
         self.dns_forest_name = f_n
+
+    def domain_joined(self):
+        return True
+
+    @classmethod
+    def get_timestamp(cls):
+        return cls.timestamp
+
+    @classmethod
+    def get_nonce(cls):
+        return cls.randomvalue
 
     def negotiated_security_ok(self, NegFlg):
 	return True
@@ -57,15 +56,38 @@ class ATestServer(ntlm2.ServerInterface):
         return self.dns_forest_name
 
 class ATestClient(ntlm2.ClientInterface):
-    def __init__(self, w, d):
+    randomvalue = 0
+    timestamp = 0
+
+    def __init__(self, w, d, u, p, unsupported_flags=0):
+        super(ATestClient,self).__init__(unsupported_flags)
         self.workstation = w
         self.domain = d
+        self.user=u
+        self.password=p
+
+    def negotiated_security_ok(self, NegFlg):
+	return True
+
+    @classmethod
+    def get_timestamp(cls):
+        return cls.timestamp
+
+    @classmethod
+    def get_nonce(cls):
+        return cls.randomvalue
 
     def get_workstation(self):
         return self.workstation
 
     def get_domain(self):
         return self.domain
+
+    def get_user_name(self):
+        return self.user
+
+    def get_user_password(self):
+        return self.password
 
 def unicode_encode(s):
     """convert a unicode string to a byte encoding"""
@@ -152,7 +174,7 @@ class TestNTLMClient(object):
         #Version 1 negotiate message test
 
         #Test simplest possible negotiate message
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType1Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType1Message
         message = HexToByte("4e544c4d535350000100000002020000")
         f = StringIO.StringIO(message)
         negotiate_message = ntlm2.NTLMMessage.read(f)
@@ -185,7 +207,7 @@ class TestNTLMClient(object):
 
     def test_parse_full_negotiate_message(self):
         #Test full negotiate message
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType1Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType1Message
         message = HexToByte("4e544c4d53535000010000000732000206000600330000000b000b0028000000050093080000000f574f524b53544154494f4e444f4d41494e")
 
         f = StringIO.StringIO(message)
@@ -256,8 +278,8 @@ class TestNTLMClient(object):
 
     def test_method__create_negotiate_message(self):
         flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
-        client_object = ATestClient("WORKSTATION", "DOMAIN")
-        negotiate_bytes = ntlm2.NTLMNegotiateMessage.create(flags, client_object).get_message_contents()
+        client_object = ATestClient("WORKSTATION", "DOMAIN", "", "")
+        negotiate_bytes = ntlm2.NTLMNegotiateMessageV1.create(flags, client_object).get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
         assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
@@ -334,7 +356,7 @@ class TestNTLMClient(object):
         """Tests parsing ntlm challenge messages"""
         challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
         f = StringIO.StringIO(challenge)
-        challenge_message = ntlm2.NTLMChallengeMessage.read(f)
+        challenge_message = ntlm2.NTLMChallengeMessageV1.read(f)
         assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
         assert challenge_message.get_string_fields() == {"TargetName": "", "TargetInfo": ""}
         challenge_fields = challenge_message.MessageFields
@@ -346,7 +368,7 @@ class TestNTLMClient(object):
         """Tests parsing ntlm challenge messages"""
         challenge = HexToByte("4e544c4d53535000020000000c000c0030000000010281000123456789abcdef0000000000000000620062003c00000044004f004d00410049004e0002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
         f = StringIO.StringIO(challenge)
-        challenge_message = ntlm2.NTLMChallengeMessage.read(f)
+        challenge_message = ntlm2.NTLMChallengeMessageV1.read(f)
         assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
         #TargetName MUST be expressed in the negotiated character set [MS-NLMP] page 21.
         #If a TargetInfo AV_PAIR Value is textual, it MUST be encoded in Unicode irrespective of what character set was negotiated [MS-NLMP] page 21.
@@ -403,7 +425,7 @@ class TestNTLMClient(object):
         return expected_value + "00000000"
 
     def test_AV_PAIR_Handler_to_byte_string(self):
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType2Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType2Message
         valid_pairs = ["01000c00530045005200560045005200",
                        "02000c0044004f004d00410049004e00",
                        "030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d00",
@@ -420,7 +442,7 @@ class TestNTLMClient(object):
 
     def test_manually_create_simple_challenge_message(self):
         expected_challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
-        challenge_message = ntlm2.NTLMChallengeMessage()
+        challenge_message = ntlm2.NTLMChallengeMessageV1()
         challenge_message.set_negotiate_flags(0x0202)
         challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
         negotiate_bytes = challenge_message.get_message_contents()
@@ -430,7 +452,7 @@ class TestNTLMClient(object):
 
     def test_manually_create_full_challenge_message(self):
         """The results of this test are dependent on the ordering of TargetName and TargetInfo in the payload"""
-        challenge_message = ntlm2.NTLMChallengeMessage()
+        challenge_message = ntlm2.NTLMChallengeMessageV1()
         challenge_message.set_negotiate_flags(0x00000001 | 0x00000200 |0x00010000 | 0x00800000)
         challenge_message.TargetName = "DOMAIN".encode("utf-16le")
         challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
@@ -470,8 +492,8 @@ class TestNTLMClient(object):
         server_object = ATestServer("SERVER", "DOMAIN", "server.domain.com", "domain.com", None)
         client_flags = 0x00000001 | 0x00000200 | 0x00800000
         cfg_flags = 0x00010000
-        NTLMChallengeMessageTester.randomvalue = HexToByte("0123456789abcdef")  #Ensure that the server challenge will be 0123456789abcdef
-        negotiate_bytes = NTLMChallengeMessageTester.create(client_flags, cfg_flags, server_object).get_message_contents()
+        ATestServer.randomvalue = HexToByte("0123456789abcdef")  #Ensure that the server challenge will be 0123456789abcdef
+        negotiate_bytes = ntlm2.NTLMChallengeMessageV1.create(client_flags, cfg_flags, server_object).get_message_contents()
         negotiate_hex = ByteToHex("".join([chr(x) for x in negotiate_bytes])).lower().replace(" ","")
         #Need to work out the ordering of the payload fields in order to work out what the valid message looks like
         TargetName_hex = "44004f004d00410049004e00"
@@ -520,24 +542,32 @@ class TestNTLMClient(object):
         authenticate_message.Workstation = "WORKSTATION".encode(encoding)
         return authenticate_message
 
-    def _do_test_authenticate_message_values(self, authenticate_message, flags, EncryptedRandomSessionKey=None, encoding = "utf-16le", v2=False):
+    def _do_test_authenticate_message_values(self, authenticate_message, flags, EncryptedRandomSessionKey=None, encoding = "utf-16le", v2=False, lmchll=True):
         assert authenticate_message.Header.Signature == "NTLMSSP"
         assert authenticate_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmAuthenticate.const
         if v2:
-            assert authenticate_message.LmChallengeResponse == HexToByte("d6e6152ea25d03b7c6ba6629c2d6aaf0ffffff0011223344")
+            #A version 2 response should not provide an LmChallengeResponse if the challenge message provides TargetInfo
+            if lmchll is None:
+                assert not authenticate_message.LmChallengeResponse
+            else:
+                assert authenticate_message.LmChallengeResponse == HexToByte("d6e6152ea25d03b7c6ba6629c2d6aaf0ffffff0011223344")
             assert authenticate_message.NtChallengeResponse == HexToByte("cbabbca713eb795d04c97abc01ee498301010000000000000090d336b734c301ffffff00112233440000000002000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d000000000000000000")
         else:
             assert authenticate_message.LmChallengeResponse == HexToByte("c337cd5cbd44fc9782a667af6d427c6de67c20c2d3e77c56")
             assert authenticate_message.NtChallengeResponse == HexToByte("25a98c1c31e81847466b29b2df4680f39958fb8c213a9cc6")
         assert authenticate_message.DomainName == "DOMAIN".encode(encoding)
         assert authenticate_message.UserName == "user".encode(encoding)
-        assert authenticate_message.Workstation == "WORKSTATION".encode(encoding)
+        #Target info has been changed for test_method__create_version2_authenticate_message so the correct Worstation value is "SERVER"
+        if lmchll is None:
+            assert authenticate_message.Workstation == "SERVER".encode(encoding)
+        else:
+            assert authenticate_message.Workstation == "WORKSTATION".encode(encoding)
         assert authenticate_message.MessageFields.NegotiateFlags == flags
         if EncryptedRandomSessionKey is not None:
             assert authenticate_message.EncryptedRandomSessionKey == HexToByte(EncryptedRandomSessionKey)
 
     def test_parse_version1_authenticate_message(self):
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
         message = HexToByte("4e544c4d5353500003000000180018006a00000018001800820000000c000c0040000000080008004c0000001600160054000000000000009a0000000102000044004f004d00410049004e00750073006500720057004f0052004b00530054004100540049004f004e00c337cd5cbd44fc9782a667af6d427c6de67c20c2d3e77c5625a98c1c31e81847466b29b2df4680f39958fb8c213a9cc6")
         f = StringIO.StringIO(message)
         authenticate_message = ntlm2.NTLMAuthenticateMessageV1.read(f)
@@ -545,7 +575,7 @@ class TestNTLMClient(object):
         self._do_test_authenticate_message_values(authenticate_message, 0x0201)
 
     def test_manually_create_version1_authenticate_message(self):
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
         authenticate_message = self.get_test_authenticate_message(ntlm2.NTLMAuthenticateMessageV1, 0x0201, "utf-16le")
         authenticate_bytes = authenticate_message.get_message_contents()
         authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
@@ -556,7 +586,7 @@ class TestNTLMClient(object):
         self._do_test_authenticate_message_values(authenticate_message, 0x0201)
 
     def test_manually_create_version2_authenticate_message(self):
-        #Example taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
         authenticate_message = self.get_test_authenticate_message(ntlm2.NTLMAuthenticateMessageV2, 0x0201, "utf-16le")
         authenticate_bytes = authenticate_message.get_message_contents()
         authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
@@ -565,6 +595,48 @@ class TestNTLMClient(object):
         parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
         parse_message.verify()
         self._do_test_authenticate_message_values(authenticate_message, 0x0201, v2=True)
+
+    def test_method__create_version1_authenticate_message(self):
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
+        server_object = ATestServer("WORKSTATION", "DOMAIN", "server.domain.com", "domain.com", None)
+        flags = 0x0201 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO
+        ATestServer.randomvalue = HexToByte("0123456789abcdef")  #Ensure that the server challenge will be 0123456789abcdef
+        challenge_message = ntlm2.NTLMChallengeMessageV1.create(flags, 0, server_object)
+
+        ATestClient.randomvalue = HexToByte("ffffff0011223344")
+        ATestClient.timestamp = HexToByte("0090d336b734c301")
+        client_object = ATestClient("WORKSTATION", "DOMAIN", "user", "SecREt01")
+        authenticate_message, responsedata = ntlm2.NTLMAuthenticateMessageV1.create(client_object, challenge_message)
+
+        authenticate_bytes = authenticate_message.get_message_contents()
+        authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
+        #Parse message to see if it is valid
+        f = StringIO.StringIO(authenticate_bytes)
+        parse_message = ntlm2.NTLMAuthenticateMessageV1.read(f)
+        parse_message.verify()
+        self._do_test_authenticate_message_values(authenticate_message, challenge_message.MessageFields.NegotiateFlags)
+
+    def test_method__create_version2_authenticate_message(self):
+        #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
+        server_object = ATestServer("WORKSTATION", "DOMAIN", "server.domain.com", "domain.com", None)
+        flags = 0x0201 | NTLM_FLAGS.NTLMSSP_NEGOTIATE_TARGET_INFO
+        ATestServer.randomvalue = HexToByte("0123456789abcdef")  #Ensure that the server challenge will be 0123456789abcdef
+        challenge_message = ntlm2.NTLMChallengeMessageV2.create(flags, 0, server_object)
+        challenge_message.TargetInfo = HexToByte("02000c0044004f004d00410049004e0001000c005300450052005600450052000400140064006f006d00610069006e002e0063006f006d00030022007300650072007600650072002e0064006f006d00610069006e002e0063006f006d0000000000")
+
+        ATestClient.randomvalue = HexToByte("ffffff0011223344")
+        ATestClient.timestamp = HexToByte("0090d336b734c301")
+        client_object = ATestClient("WORKSTATION", "DOMAIN", "user", "SecREt01")
+        authenticate_message, responsedata = ntlm2.NTLMAuthenticateMessageV2.create(client_object, challenge_message)
+
+        authenticate_bytes = authenticate_message.get_message_contents()
+        authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
+        #Parse message to see if it is valid
+        f = StringIO.StringIO(authenticate_bytes)
+        parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
+        parse_message.verify()
+        print authenticate_message.Workstation
+        self._do_test_authenticate_message_values(authenticate_message, challenge_message.MessageFields.NegotiateFlags,v2=True, lmchll=None)
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
