@@ -116,6 +116,9 @@ def HexToByte( hexStr ):
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
 
+    def test_little_endian_bytes(self):
+        assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")
+
     def test_hash_functions(self):
         """Test underlying hash functions"""
         ServerChallenge = HexToByte("01 23 45 67 89 ab cd ef")
