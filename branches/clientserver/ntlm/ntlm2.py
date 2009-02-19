@@ -8,6 +8,8 @@ import des
 import hashlib
 import hmac
 import StringIO
+from datetime import datetime, timedelta
+import time
 
 def unimplemented(func):
     """Simple decorator, to help identify unimplemented base class functions"""
@@ -19,6 +21,18 @@ def unimplemented(func):
             raise NotImplementedError("%s.%s needs a \"%s\" function"%(inst.__class__.__module__, inst.__class__.__name__, func.__name__))
 
     return wrapper
+
+#-----------------------------------------------------------------------------------------------------------
+
+def little_endian_bytes(value):
+    #Convert to hexadecimal string
+    value = "%x"%value
+    #Now convert from Big Endian to Little Endian byte order
+    length = len(value)
+    if length%2:
+        value="0"+value
+        length+=1
+    return "".join([chr(int(value[x-2:x], 16)) for x in xrange(length,0,-2)])
 
 #-----------------------------------------------------------------------------------------------------------
 
@@ -747,6 +761,7 @@ class NTLMInterface(object):
     def __init__(self, unsupported_flags=0):
         #Set bits on this property to indicate which flags are unsupported
         self._unsupported_flags = unsupported_flags & self.optional_flags
+        self.request_datagram(False)
 
     def supported_flags(self, flags):
 	"""Function filters out any flags not supported by client/server"""
@@ -765,6 +780,7 @@ class NTLMInterface(object):
             #Mark flags as supported or unsupported
             self._unsupported_flags = self._unsupported_flags | required_flags
             if value:
+                #The setting denoted by attr_name is being requested so the required_flags must be supported
                 self._unsupported_flags = self._unsupported_flags ^ required_flags
             self.__dict__[attr_name] = bool(value)
         #If the request is enabled, return the flags required by the request otherwise return 0
@@ -781,8 +797,11 @@ class NTLMInterface(object):
 
     @classmethod
     def get_timestamp(cls):
-        """Must return a timestamp as a hexidecimal string"""
-        raise NotImplementedError("TODO - implement get_timestamp() as NTLMInterface base class method")
+        """A 64-bit unsigned integer that contains the current system time, represented as the number of 100 nanosecond ticks elapsed
+           since midnight of January 1, 1601 (UTC). Must return a timestamp as a little-endian byte array."""
+        delta = datetime.now() - datetime(1601,1,1,0,0,0,0)
+        delta = (delta.days*86400 + delta.seconds + time.timezone)*10000000 + delta.microseconds*10
+        return little_endian_bytes(delta)
 
     @classmethod
     def get_nonce(cls):
@@ -839,7 +858,6 @@ class ClientInterface(NTLMInterface):
         self.request_replay_detect(False)
         self.request_sequence_detect(False)
         self.request_confidentiality(False)
-        self.request_datagram(False)
         self.request_identify(False)
         self._config_flags = NTLMNegotiateMessageBase.DEFAULT_FLAGS
 
@@ -925,7 +943,6 @@ class ServerInterface(NTLMInterface):
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
     def __init__(self, unsupported_flags=0):
         super(ServerInterface,self).__init__(unsupported_flags)
-        self.request_datagram(False)
         self._config_flags = NTLMChallengeMessageBase.DEFAULT_FLAGS
 
     @unimplemented
