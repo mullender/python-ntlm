@@ -183,9 +183,9 @@ class TestNTLMClient(object):
         negotiate_message = ntlm2.NTLMMessage.read(f)
         negotiate_message.verify()
         assert negotiate_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmNegotiate.const
-        assert negotiate_message.get_string_field("Workstation") is None
-        assert negotiate_message.get_string_field("DomainName") is None
-        assert negotiate_message.get_string_fields() == {}
+        assert negotiate_message.get_string_field("Workstation") == ""
+        assert negotiate_message.get_string_field("DomainName") == ""
+        assert negotiate_message.get_string_fields() == {"Workstation":"", "DomainName":""}
         assert negotiate_message.MessageFields.NegotiateFlags == NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM
         version = negotiate_message.get_version_field()
         assert version is None
@@ -285,7 +285,7 @@ class TestNTLMClient(object):
         negotiate_bytes = ntlm2.NTLMNegotiateMessageV1.create(flags, client_object).get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
-        assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20000060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
+        assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20800060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
 
     # -------------------------------------------------------------------------------------------------------------
     # Challenge Message Tests

@@ -778,9 +778,9 @@ class NTLMInterface(object):
         #Values can be modified if value is not None
         if value is not None:
             #Mark flags as supported or unsupported
-            self._unsupported_flags = self._unsupported_flags | required_flags
             if value:
-                #The setting denoted by attr_name is being requested so the required_flags must be supported
+                #The setting denoted by attr_name is being requested so the required_flags MUST be supported
+                self._unsupported_flags = self._unsupported_flags | required_flags
                 self._unsupported_flags = self._unsupported_flags ^ required_flags
             self.__dict__[attr_name] = bool(value)
         #If the request is enabled, return the flags required by the request otherwise return 0
@@ -852,14 +852,23 @@ class NTLMInterface(object):
 class ClientInterface(NTLMInterface):
     """Provides access to information about the client machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
-    def __init__(self, unsupported_flags=0):
+    def __init__(self, unsupported_flags=0, version=1):
         super(ClientInterface,self).__init__(unsupported_flags)
+
+        if version == 2:
+            self.negotitate_class = NTLMNegotiateMessageV2
+            self.authenticate_class = NTLMAuthenticateMessageV2
+        else:
+            self.negotitate_class = NTLMNegotiateMessageV1
+            self.authenticate_class = NTLMAuthenticateMessageV1
+
         self.request_integrity(False)
         self.request_replay_detect(False)
         self.request_sequence_detect(False)
         self.request_confidentiality(False)
         self.request_identify(False)
         self._config_flags = NTLMNegotiateMessageBase.DEFAULT_FLAGS
+
 
     @unimplemented
     def get_workstation(self):
@@ -941,8 +950,14 @@ class ClientInterface(NTLMInterface):
 class ServerInterface(NTLMInterface):
     """Provides access to information about the server machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
-    def __init__(self, unsupported_flags=0):
+    def __init__(self, unsupported_flags=0, version=1):
         super(ServerInterface,self).__init__(unsupported_flags)
+
+        if version == 2:
+            self.challenge_class = NTLMChallengeMessageV2
+        else:
+            self.challenge_class = NTLMChallengeMessageV1
+
         self._config_flags = NTLMChallengeMessageBase.DEFAULT_FLAGS
 
     @unimplemented
@@ -1471,6 +1486,10 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
 	   xChallengeResponseBufferOffset values should be set to 0 in the calling scope.
 	   user and domain are required for v2 and can just be ignored for version 1"""
 
+    @unimplemented
+    def check(self, NegFlg, password, server_challenge, encoding):
+        """Returns true if the values in this message prove knowledge of the password"""
+
     LmChallengeResponse = StringProperty("LmChallengeResponse")
     NtChallengeResponse = StringProperty("NtChallengeResponse")
     DomainName = StringProperty("DomainName")
@@ -1539,6 +1558,31 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    hashlib.new('md4', ResponseKeyNT).digest())
 
+    def check(self, NegFlg, password, server_challenge, encoding):
+        """Returns true if the values in this message prove knowledge of the password"""
+        #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
+        #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
+        if NegFlg == None:
+            NegFlg = self.MessageFields.NegotiateFlags
+
+        client_challenge=None
+        if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
+            client_challenge = self.LmChallengeResponse[0:8]
+
+        responsedata = self.compute_response(NegFlg,                                #Flags
+                                             password,                              #Password
+                                             self.UserName.decode(self.unicode),    #User name
+                                             self.DomainName.decode(self.unicode),  #Domain
+                                             server_challenge,                      #Server Challenge
+                                             client_challenge,                      #Client Challenge
+                                             None,                                  #Time
+                                             None,                                  #Target Info
+                                             encoding)
+
+        if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY:
+            return responsedata.LmChallengeResponse == self.LmChallengeResponse
+        return responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse
+
 #-----------------------------------------------------------------------------------------------
 # NTLMAuthenticateMessageV2
 #-----------------------------------------------------------------------------------------------
@@ -1578,6 +1622,23 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 			    NTChallengeResponse,
 			    LmChallengeResponse,
 			    SessionBaseKey)
+
+    def check(self, NegFlg, password, server_challenge, encoding):
+        """Returns true if the values in this message prove knowledge of the password"""
+        #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
+        #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
+        if NegFlg == None:
+            NegFlg = self.MessageFields.NegotiateFlags
+        """responsedata = msg.compute_response(msg.MessageFields.NegotiateFlags,   #Flags
+                                            self.users[msg.UserName],           #Password
+                                            msg.UserName,                       #User name
+                                            msg.DomainName,                     #Domain
+                                            server_challenge,                   #Server Challenge
+                                            client_object.get_nonce(),          #Client Challenge
+                                            timestamp,                          #Time
+                                            challenge_message.TargetInfo,       #Target Info
+                                            encoding)"""
+        return False
 
     @classmethod
     def _nt_proof_str(cls, ResponseKeyNT, ServerChallenge, temp):
