@@ -1629,16 +1629,22 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
         #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
         if NegFlg == None:
             NegFlg = self.MessageFields.NegotiateFlags
-        """responsedata = msg.compute_response(msg.MessageFields.NegotiateFlags,   #Flags
-                                            self.users[msg.UserName],           #Password
-                                            msg.UserName,                       #User name
-                                            msg.DomainName,                     #Domain
-                                            server_challenge,                   #Server Challenge
-                                            client_object.get_nonce(),          #Client Challenge
-                                            timestamp,                          #Time
-                                            challenge_message.TargetInfo,       #Target Info
-                                            encoding)"""
-        return False
+        #self.NtChallengeResponse consists of NTProofStr (16 bytes) + temp
+        temp = self.NtChallengeResponse[16:]
+        timestamp = temp[8:16]
+        client_challenge = temp[16:24]
+        target_info = temp[28:-4]
+        responsedata =self.compute_response(NegFlg,                                 #Flags
+                                            password,                               #Password
+                                            self.UserName.decode(self.unicode),     #User name
+                                            self.DomainName.decode(self.unicode),   #Domain
+                                            server_challenge,                       #Server Challenge
+                                            client_challenge,                       #Client Challenge
+                                            timestamp,                              #Time
+                                            target_info,                            #Target Info
+                                            encoding)
+
+        return responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse
 
     @classmethod
     def _nt_proof_str(cls, ResponseKeyNT, ServerChallenge, temp):
