@@ -118,6 +118,7 @@ class TestNTLMClient(object):
 
     def test_little_endian_bytes(self):
         assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")
+        assert ntlm2.little_endian_bytes_to_decimal(HexToByte("0090d336b734c301")) == 127003176000000000L
 
     def test_hash_functions(self):
         """Test underlying hash functions"""

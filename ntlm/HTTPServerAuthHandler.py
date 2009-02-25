@@ -58,7 +58,7 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         #Remove challenge from list regardless of whether the client authentication is valid. All that matters is that the client has responded
         del self.challenges[client_details]
 
-        return msg.check(temp["flags"], self.users[username], temp["server_challenge"], msg.unicode)
+        return msg.check(temp["flags"], self.users[username], temp["server_challenge"], self.max_lifetime(), msg.unicode)
 
     def negotiated_security_ok(self, NegFlg):
         return True
