@@ -24,6 +24,11 @@ def unimplemented(func):
 
 #-----------------------------------------------------------------------------------------------------------
 
+def get_timeoffset():
+    delta = datetime.now() - datetime(1601,1,1,0,0,0,0)
+    delta = (delta.days*86400 + delta.seconds + time.timezone)*10000000 + delta.microseconds*10
+    return delta
+
 def little_endian_bytes(value):
     #Convert to hexadecimal string
     value = "%x"%value
@@ -33,6 +38,14 @@ def little_endian_bytes(value):
         value="0"+value
         length+=1
     return "".join([chr(int(value[x-2:x], 16)) for x in xrange(length,0,-2)])
+
+def little_endian_bytes_to_decimal(value):
+    result=""
+    multiplier=1
+    print len(value)
+    for i in xrange(len(value) - 1, -1, -1):
+        result += "%02x"%ord(value[i])
+    return int(result, 16)
 
 #-----------------------------------------------------------------------------------------------------------
 
@@ -799,9 +812,7 @@ class NTLMInterface(object):
     def get_timestamp(cls):
         """A 64-bit unsigned integer that contains the current system time, represented as the number of 100 nanosecond ticks elapsed
            since midnight of January 1, 1601 (UTC). Must return a timestamp as a little-endian byte array."""
-        delta = datetime.now() - datetime(1601,1,1,0,0,0,0)
-        delta = (delta.days*86400 + delta.seconds + time.timezone)*10000000 + delta.microseconds*10
-        return little_endian_bytes(delta)
+        return little_endian_bytes(get_timeoffset())
 
     @classmethod
     def get_nonce(cls):
@@ -1258,7 +1269,7 @@ class NTLMChallengeMessageBase(NTLMMessage):
 	#If NTLM_NEGOTIATE_OEM is set in NegFlg, then use OEM encoding. The flag could not have been set if NTLMSSP_NEGOTIATE_UNICODE
 	#was set. If NTLMSSP_NEGOTIATE_UNICODE is set in NegFlg, then use unicode encoding. If neither flag is set, return SEC_E_INVALID_TOKEN
 	encoding = cls.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else cls.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
-	if encoding is None:
+	if cls.oem and encoding is None:
 	    raise WinError("NTLM negotiate flags must set a valid text encoding flag. Neither NTLMSSP_NEGOTIATE_UNICODE nor NTLMSSP_NEGOTIATE_OEM was set.", WinError.SEC_E_INVALID_TOKEN)
 
 	TargetName = None
@@ -1266,10 +1277,14 @@ class NTLMChallengeMessageBase(NTLMMessage):
 	if NTLM_FLAGS.NTLMSSP_REQUEST_TARGET & NegFlg:
 	    if server_object.domain_joined():
                 NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_DOMAIN
-		TargetName = server_object.get_NetBIOS_domain().encode(encoding)
+		TargetName = server_object.get_NetBIOS_domain()
+                if encoding:
+                    TargetName = TargetName.encode(encoding)
 	    else:
                 NegFlg = NegFlg | NTLM_FLAGS.NTLMSSP_TARGET_TYPE_SERVER
-		TargetName = server_object.get_NetBIOS_name().encode(encoding)
+		TargetName = server_object.get_NetBIOS_name()
+                if encoding:
+                    TargetName = TargetName.encode(encoding)
 
         TargetInfo = cls.create_targetinfo(NegFlg, server_object)
         if TargetInfo:
@@ -1402,8 +1417,10 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
         for pair in AVHandler.get_av_pairs():
             av_pair_dict[pair.Header.AvId] = pair.value_byte_string()
 
-        #AUTHENTICATE_MESSAGE ... where all strings are encoded as RPC_UNICODE_STRING [MS-NLMP] page 44
-        encoding = cls.unicode
+        encoding = cls.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else cls.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
+	if cls.oem and encoding is None:
+	    raise WinError("NTLM negotiate flags must set a valid text encoding flag. Neither NTLMSSP_NEGOTIATE_UNICODE nor NTLMSSP_NEGOTIATE_OEM was set.", WinError.SEC_E_INVALID_TOKEN)
+
         domain = client_object.get_domain()
         user_name = client_object.get_user_name()
         server_NETBIOS_name = av_pair_dict.get(AV_TYPES.MsvAvNbComputerName, None)
@@ -1442,9 +1459,9 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
             authenticate_message.LmChallengeResponse = responsedata.LmChallengeResponse
         authenticate_message.NtChallengeResponse = responsedata.NTChallengeResponse
         if domain:
-            authenticate_message.DomainName = domain.encode(encoding)
+            authenticate_message.DomainName = domain.encode(encoding) if encoding else domain
         if user_name:
-            authenticate_message.UserName = user_name.encode(encoding)
+            authenticate_message.UserName = user_name.encode(encoding) if encoding else user_name
         if server_NETBIOS_name:
             authenticate_message.Workstation = server_NETBIOS_name #Server name is already encoded
 
@@ -1487,7 +1504,7 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
 	   user and domain are required for v2 and can just be ignored for version 1"""
 
     @unimplemented
-    def check(self, NegFlg, password, server_challenge, encoding):
+    def check(self, NegFlg, password, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
 
     LmChallengeResponse = StringProperty("LmChallengeResponse")
@@ -1558,7 +1575,7 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    hashlib.new('md4', ResponseKeyNT).digest())
 
-    def check(self, NegFlg, password, server_challenge, encoding):
+    def check(self, NegFlg, password, server_challenge, max_life,  encoding):
         """Returns true if the values in this message prove knowledge of the password"""
         #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
         #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
@@ -1568,11 +1585,12 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
         client_challenge=None
         if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
             client_challenge = self.LmChallengeResponse[0:8]
-
+        username = self.UserName.decode(encoding) if encoding else self.UserName
+        domainname = self.DomainName.decode(encoding) if encoding else self.DomainName
         responsedata = self.compute_response(NegFlg,                                #Flags
                                              password,                              #Password
-                                             self.UserName.decode(self.unicode),    #User name
-                                             self.DomainName.decode(self.unicode),  #Domain
+                                             username,                              #User name
+                                             domainname,                            #Domain
                                              server_challenge,                      #Server Challenge
                                              client_challenge,                      #Client Challenge
                                              None,                                  #Time
@@ -1599,7 +1617,9 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
     @classmethod
     def create_NT_hashed_password(cls, password, user, domain, encoding):
 	digest = hashlib.new('md4', password.encode(cls.unicode)).digest()
-	return hmac.new(digest, (user.upper()+domain).encode(encoding)).digest()
+        if encoding:
+            return hmac.new(digest, (user.upper()+domain).encode(encoding)).digest()
+        return hmac.new(digest, (user.upper()+domain)).digest()
 
     @classmethod
     def compute_response(cls, NegFlg, password, user, domain, ServerChallenge, ClientChallenge, Time, ServerName, encoding):
@@ -1623,7 +1643,7 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    SessionBaseKey)
 
-    def check(self, NegFlg, password, server_challenge, encoding):
+    def check(self, NegFlg, password, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
         #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
         #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
@@ -1632,12 +1652,18 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
         #self.NtChallengeResponse consists of NTProofStr (16 bytes) + temp
         temp = self.NtChallengeResponse[16:]
         timestamp = temp[8:16]
+        #Must make sure that the timestamp does not exceed maximum lifespan for the connection
+        duration = get_timeoffset() - little_endian_bytes_to_decimal(timestamp)
+        if duration > max_life * 10000000:
+            return False
         client_challenge = temp[16:24]
         target_info = temp[28:-4]
+        username = self.UserName.decode(encoding) if encoding else self.UserName
+        domainname = self.DomainName.decode(encoding) if encoding else self.DomainName
         responsedata =self.compute_response(NegFlg,                                 #Flags
                                             password,                               #Password
-                                            self.UserName.decode(self.unicode),     #User name
-                                            self.DomainName.decode(self.unicode),   #Domain
+                                            username,                               #User name
+                                            domainname,                             #Domain
                                             server_challenge,                       #Server Challenge
                                             client_challenge,                       #Client Challenge
                                             timestamp,                              #Time
