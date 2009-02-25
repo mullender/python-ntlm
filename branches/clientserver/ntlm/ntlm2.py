@@ -512,6 +512,28 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
             return 8
         return 0
 
+    def pformat(self):
+        format_dict = {}
+        string_fields = self.get_string_fields()
+        format_dict.update(string_fields)
+        messagefields = self.MessageFields
+        for field_name, field_type in self._fields_:
+            if not field_name.startswith("Message") and field_name.endswith("Fields"):
+                format_dict[field_name] = getattr(self, field_name)
+        HeaderSize = ctypes.sizeof(self.Header) + ctypes.sizeof(messagefields)
+        format_dict["Header Size"] = HeaderSize
+        for field_name, field_type in messagefields._fields_:
+            value = getattr(messagefields, field_name)
+            if field_name in string_fields and field_name != "EncryptedRandomSessionKey":
+                fieldheader = getattr(messagefields, field_name)
+                sequence = [fieldheader.BufferOffset-HeaderSize, fieldheader.BufferOffset+fieldheader.Len-HeaderSize]
+                format_dict[field_name] = (string_fields[field_name], sequence, value)
+            else:
+                format_dict[field_name] = value
+        # format_dict["payload"] = len(self.payload)
+        return pprint.pformat(format_dict)
+
+
     def get_string_field(self, name):
         """Looks up a string field in the payload"""
         MessageFields = self.MessageFields
