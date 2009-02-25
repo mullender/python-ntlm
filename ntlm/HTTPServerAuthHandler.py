@@ -48,17 +48,24 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         if not self.is_authenticate_message(msg) or not msg.UserName:
             return False
 
-        username = msg.UserName.decode(msg.unicode)
-        if not username in self.users:
-            return False
-
         temp=self.challenges.get(client_details, None)
         if temp is None:
             return False
         #Remove challenge from list regardless of whether the client authentication is valid. All that matters is that the client has responded
         del self.challenges[client_details]
 
-        return msg.check(temp["flags"], self.users[username], temp["server_challenge"], self.max_lifetime(), msg.unicode)
+        if temp["flags"] == None:
+            NegFlg = msg.MessageFields.NegotiateFlags
+        else:
+            NegFlg = temp["flags"]
+
+        encoding = msg.unicode if NegFlg&ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
+        domainname = msg.DomainName.decode(encoding) if encoding else msg.DomainName
+        username = msg.UserName.decode(encoding) if encoding else  msg.UserName
+        if not username in self.users:
+            return False
+
+        return msg.check(NegFlg, self.users[username], username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
 
     def negotiated_security_ok(self, NegFlg):
         return True
