@@ -1526,7 +1526,7 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
 	   user and domain are required for v2 and can just be ignored for version 1"""
 
     @unimplemented
-    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
+    def authenticated_response(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
 
     LmChallengeResponse = StringProperty("LmChallengeResponse")
@@ -1597,7 +1597,7 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    hashlib.new('md4', ResponseKeyNT).digest())
 
-    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
+    def authenticated_response(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
         #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
         #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
@@ -1615,8 +1615,8 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
                                              encoding)
 
         if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY:
-            return responsedata.LmChallengeResponse == self.LmChallengeResponse
-        return responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse
+            return responsedata if responsedata.LmChallengeResponse == self.LmChallengeResponse else None
+        return responsedata if responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse else None
 
 #-----------------------------------------------------------------------------------------------
 # NTLMAuthenticateMessageV2
@@ -1660,7 +1660,7 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    SessionBaseKey)
 
-    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
+    def authenticated_response(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
         #self.NtChallengeResponse consists of NTProofStr (16 bytes) + temp
         temp = self.NtChallengeResponse[16:]
@@ -1681,7 +1681,7 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
                                             target_info,                            #Target Info
                                             encoding)
 
-        return responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse
+        return responsedata if responsedata.LmChallengeResponse == self.LmChallengeResponse and responsedata.NTChallengeResponse == self.NtChallengeResponse else None
 
     @classmethod
     def _nt_proof_str(cls, ResponseKeyNT, ServerChallenge, temp):

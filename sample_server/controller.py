@@ -46,7 +46,7 @@ def main():
         },
         '/test_page': {'tools.ntlm_auth.on': True,
                        #'tools.ntlm_auth.realm' : 'Some site',
-                       'tools.ntlm_auth.handler': HTTPServerAuthHandler(users = users, version=2)},
+                       'tools.ntlm_auth.handler': HTTPServerAuthHandler(users = users, version=1)},
     })
 
 if __name__ == '__main__':

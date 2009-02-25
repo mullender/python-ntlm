@@ -1,5 +1,6 @@
 # Create a new Toolbox.
 import ntlm2
+from ntlm2 import WinError, NTLM_Exception, NTLM_FLAGS
 import base64
 import socket
 import StringIO
@@ -45,6 +46,11 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         return base64.b64encode(msg.get_message_contents())
 
     def authentication_valid(self, msg, client_details):
+        if self.blocked():
+            raise WinError("The server is blocked from sending NTLM Authentication messages", WinError.STATUS_NTLM_BLOCKED)
+        #In connectionless mode, flag negotiation is only completed at this point so check that security levels are acceptable
+        if self.request_datagram() and self.require_128bit_encryption() and not msg.MessageFields.NegotiateFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_128:
+            raise WinError("NTLM negotiate flags do not request 128 bit encryption. The server requires 128 bit encryption", WinError.SEC_E_UNSUPPORTED_FUNCTION)
         try:
             if not self.is_authenticate_message(msg) or not msg.UserName:
                 return False
@@ -56,17 +62,29 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
             del self.challenges[client_details]
 
             if temp["flags"] == None:
+                #"temp["flags"] == None" should only really occur in connectionless mode
                 NegFlg = msg.MessageFields.NegotiateFlags
             else:
                 NegFlg = temp["flags"]
 
-            encoding = msg.unicode if NegFlg&ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
+            encoding = msg.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
             domainname = msg.DomainName.decode(encoding) if encoding else msg.DomainName
             username = msg.UserName.decode(encoding) if encoding else  msg.UserName
             if not username in self.users:
                 return False
 
-            return msg.check(NegFlg, self.users[username], username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
+            autheniticated_response = msg.authenticated_response(NegFlg, self.users[username], username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
+            if not autheniticated_response:
+                return False
+          #TODO - Handle calculation of session keys where required by NegFlgs
+            """The client MUST compute the expected session key for signing and encryption, which it sends to the
+                server in the AUTHENTICATE_MESSAGE (section 3.1.5.2.1). Using this key from the
+                AUTHENTICATE_MESSAGE, the server MUST check the signature and/or decrypt the protocol
+                response, and compute a response. The response MUST be signed and/or encrypted and sent to the
+                client."""
+
+            self.create_session_keys(autheniticated_response)
+            return True
         except:
             return False
 
