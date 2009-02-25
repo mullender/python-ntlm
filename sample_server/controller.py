@@ -24,7 +24,7 @@ class Root(object):
         tmpl = loader.load('index.html')
         return tmpl.generate(title='Index Page', body="This is the index page").render('html', doctype='html')
 
-def main(filename):
+def main():
     data = {} # We'll replace this later
     users = {"admin": "secretPassword",
              "editor": "otherPassword",
@@ -50,4 +50,4 @@ def main(filename):
     })
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main()
