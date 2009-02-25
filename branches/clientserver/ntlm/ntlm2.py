@@ -1504,7 +1504,7 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
 	   user and domain are required for v2 and can just be ignored for version 1"""
 
     @unimplemented
-    def check(self, NegFlg, password, server_challenge, max_life, encoding):
+    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
 
     LmChallengeResponse = StringProperty("LmChallengeResponse")
@@ -1575,22 +1575,17 @@ class NTLMAuthenticateMessageV1(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    hashlib.new('md4', ResponseKeyNT).digest())
 
-    def check(self, NegFlg, password, server_challenge, max_life,  encoding):
+    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
         #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
         #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
-        if NegFlg == None:
-            NegFlg = self.MessageFields.NegotiateFlags
-
         client_challenge=None
         if NegFlg & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY:
             client_challenge = self.LmChallengeResponse[0:8]
-        username = self.UserName.decode(encoding) if encoding else self.UserName
-        domainname = self.DomainName.decode(encoding) if encoding else self.DomainName
         responsedata = self.compute_response(NegFlg,                                #Flags
                                              password,                              #Password
-                                             username,                              #User name
-                                             domainname,                            #Domain
+                                             user,                                  #User name
+                                             domain,                                #Domain
                                              server_challenge,                      #Server Challenge
                                              client_challenge,                      #Client Challenge
                                              None,                                  #Time
@@ -1643,12 +1638,8 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
 			    LmChallengeResponse,
 			    SessionBaseKey)
 
-    def check(self, NegFlg, password, server_challenge, max_life, encoding):
+    def check(self, NegFlg, password, user, domain, server_challenge, max_life, encoding):
         """Returns true if the values in this message prove knowledge of the password"""
-        #In connection oriented NTLM, the server should provide the Negotiated Flags when authenticating
-        #In connectionless NTLM, the server will not provide the flags so they are retrieved from the authenticate message
-        if NegFlg == None:
-            NegFlg = self.MessageFields.NegotiateFlags
         #self.NtChallengeResponse consists of NTProofStr (16 bytes) + temp
         temp = self.NtChallengeResponse[16:]
         timestamp = temp[8:16]
@@ -1658,12 +1649,10 @@ class NTLMAuthenticateMessageV2(NTLMAuthenticateMessageBase):
             return False
         client_challenge = temp[16:24]
         target_info = temp[28:-4]
-        username = self.UserName.decode(encoding) if encoding else self.UserName
-        domainname = self.DomainName.decode(encoding) if encoding else self.DomainName
         responsedata =self.compute_response(NegFlg,                                 #Flags
                                             password,                               #Password
-                                            username,                               #User name
-                                            domainname,                             #Domain
+                                            user,                                   #User name
+                                            domain,                                 #Domain
                                             server_challenge,                       #Server Challenge
                                             client_challenge,                       #Client Challenge
                                             timestamp,                              #Time
