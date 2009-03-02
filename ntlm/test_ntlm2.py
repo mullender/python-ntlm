@@ -115,6 +115,17 @@ def HexToByte( hexStr ):
 
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
+    def test_dparse_simple_challenge(self):
+        """Tests parsing ntlm challenge messages"""
+        challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
+        f = StringIO.StringIO(challenge)
+        challenge_message = ntlm2.NTLMChallengeMessageV1.read(f)
+        assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
+        assert challenge_message.get_string_fields() == {"TargetName": "", "TargetInfo": ""}
+        challenge_fields = challenge_message.MessageFields
+        assert isinstance(challenge_fields, ntlm2.NTLMMessageChallengeFields)
+        assert challenge_fields.ServerChallenge[0:8] == [ord(c) for c in HexToByte("0123456789abcdef")]
+        assert challenge_fields.NegotiateFlags == 0x0202
 
     def test_little_endian_bytes(self):
         assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")
@@ -245,8 +256,7 @@ class TestNTLMClient(object):
         negotiate_bytes = negotiate_message.get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
-        #This test fails because blank values still get encoded. So the message is still correct but there are unneeded trailing zeros
-        assert negotiate_bytes == HexToByte("4e544c4d535350000100000002020000")
+        assert negotiate_bytes == HexToByte("4e544c4d53535000010000000202000000000000000000000000000000000000")
 
     def test_manually_create_normal_negotiate_message(self):
         flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
@@ -268,11 +278,14 @@ class TestNTLMClient(object):
         negotiate_message.Header.Signature = ntlm2.NTLM_PROTOCOL_SIGNATURE
         negotiate_message.Header.MessageType = ntlm2.NTLM_MESSAGE_TYPE.NtLmNegotiate.const
         negotiate_message.set_negotiate_flags(flags)
+        negotiate_message.set_string_field("DomainName", "DOMAIN")
+        negotiate_message.set_string_field("Workstation", "WORKSTATION")
         version = negotiate_message.get_version_field()
         version.ProductMajorVersion = 5
         version.ProductMinorVersion = 0
         version.ProductBuild = 2195
         version.NTLMRevisionCurrent = 0xf
+        negotiate_message.set_version_field(version)
 
         negotiate_bytes = negotiate_message.get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
@@ -287,6 +300,14 @@ class TestNTLMClient(object):
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         negotiate_bytes = base64.b64decode(negotiate_b64)
         assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b20800060006002b0000000b000b0020000000574f524b53544154494f4e444f4d41494e")
+
+    def test_method__create_negotiate_message_with_version_field(self):
+        flags = NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION | NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM | NTLM_FLAGS.NTLMSSP_REQUEST_TARGET | NTLM_FLAGS.NTLMSSP_NEGOTIATE_NTLM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED
+        client_object = ATestClient("WORKSTATION", "DOMAIN", "", "")
+        negotiate_bytes = ntlm2.NTLMNegotiateMessageV1.create(flags, client_object).get_message_contents()
+        negotiate_b64 = base64.b64encode(negotiate_bytes)
+        negotiate_bytes = base64.b64decode(negotiate_b64)
+        assert negotiate_bytes == HexToByte("4e544c4d535350000100000007b2080200000000280000000000000028000000010203000000000f")
 
     # -------------------------------------------------------------------------------------------------------------
     # Challenge Message Tests
@@ -445,13 +466,12 @@ class TestNTLMClient(object):
         assert hexresult == valid_result
 
     def test_manually_create_simple_challenge_message(self):
-        expected_challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
+        expected_challenge = HexToByte("4e544c4d53535000020000000000000030000000020200000123456789abcdef00000000000000000000000030000000")
         challenge_message = ntlm2.NTLMChallengeMessageV1()
         challenge_message.set_negotiate_flags(0x0202)
         challenge_message.ServerChallenge = HexToByte("0123456789abcdef")
         negotiate_bytes = challenge_message.get_message_contents()
         negotiate_bytes = "".join([chr(x) for x in negotiate_bytes])
-        #This fails because the Challenge message has unneccessary trailing zeros. However the message is correct
         assert negotiate_bytes == expected_challenge
 
     def test_manually_create_full_challenge_message(self):
@@ -639,8 +659,21 @@ class TestNTLMClient(object):
         f = StringIO.StringIO(authenticate_bytes)
         parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
         parse_message.verify()
-        print authenticate_message.Workstation
         self._do_test_authenticate_message_values(authenticate_message, challenge_message.MessageFields.NegotiateFlags,v2=True, lmchll=None)
+        #Version should contain the dummy version data: (1,2,3,4,"This is not an OS")
+        version = authenticate_message.get_version_field()
+        assert version == None
+
+    def test_read_legacy_authentication(self):
+        message = base64.b64decode("TlRMTVNTUAADAAAAGAAYAEEAAAAAAAAAWQAAAAQABAA0AAAABQAFADgAAAAEAAQAPQAAAGdvbGdhZG1pbkdPTEdII0p6msHyOq5rCwyq6FQqnAqKX2WF93x=      ")
+        f = StringIO.StringIO(message)
+        authenticate_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
+        authenticate_message.verify()
+        assert authenticate_message.LmChallengeResponse == 'H#Jz\x9a\xc1\xf2:\xaek\x0b\x0c\xaa\xe8T*\x9c\n\x8a_e\x85\xf7|'
+        assert not authenticate_message.NtChallengeResponse
+        assert authenticate_message.DomainName == "golg"
+        assert authenticate_message.UserName == "admin"
+        assert authenticate_message.Workstation == "GOLG"
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
