@@ -12,7 +12,8 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         pass
 
     def __init__(self, users, default_login=False, unsupported_flags=0, version=1):
-        super(HTTPServerAuthHandler,self).__init__(unsupported_flags, version)
+        no_support_security = NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY| NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
+        super(HTTPServerAuthHandler,self).__init__(unsupported_flags | no_support_security, version)
         self.users = users
         #If this value is true, then the user will be allowed to view the login page if SSO fails
         self.default_login = default_login
