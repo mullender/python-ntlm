@@ -115,17 +115,6 @@ def HexToByte( hexStr ):
 
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
-    def test_dparse_simple_challenge(self):
-        """Tests parsing ntlm challenge messages"""
-        challenge = HexToByte("4e544c4d53535000020000000000000000000000020200000123456789abcdef")
-        f = StringIO.StringIO(challenge)
-        challenge_message = ntlm2.NTLMChallengeMessageV1.read(f)
-        assert challenge_message.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmChallenge.const
-        assert challenge_message.get_string_fields() == {"TargetName": "", "TargetInfo": ""}
-        challenge_fields = challenge_message.MessageFields
-        assert isinstance(challenge_fields, ntlm2.NTLMMessageChallengeFields)
-        assert challenge_fields.ServerChallenge[0:8] == [ord(c) for c in HexToByte("0123456789abcdef")]
-        assert challenge_fields.NegotiateFlags == 0x0202
 
     def test_little_endian_bytes(self):
         assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")

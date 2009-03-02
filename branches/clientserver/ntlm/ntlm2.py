@@ -1280,6 +1280,7 @@ class NTLMChallengeMessageBase(NTLMMessage):
 	#If, for any of the cases below, "MUST Add" is true but the flag isn't supported, an NTLMException will be raised
 	negotiate_sign = validClientFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN
 	negotiate_seal = validClientFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL
+        negotiate_extended_security = validClientFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
 	flags_to_check = [
 	#	FLAG				|		MUST Add		|	Set if supported and requested
 	("NTLMSSP_NEGOTIATE_56",			negotiate_sign or negotiate_seal,	True),
@@ -1289,9 +1290,9 @@ class NTLMChallengeMessageBase(NTLMMessage):
 	("NTLMSSP_NEGOTIATE_TARGET_INFO",		True,					True),
 	("NTLMSSP_REQUEST_NON_NT_SESSION_KEY",		False,					True),
 	("NTLMSSP_NEGOTIATE_IDENTIFY",			False,					True),
-	("NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY",	True,					True),
+	("NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY",	False,                                  negotiate_extended_security),
 	("NTLMSSP_NEGOTIATE_NT_ONLY",			True,					True),
-	("NTLMSSP_NEGOTIATE_LM_KEY",			False, not (validClientFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY)),
+	("NTLMSSP_NEGOTIATE_LM_KEY",			False,                                  not negotiate_extended_security),
 	("NTLMSSP_NEGOTIATE_DATAGRAM",			False,					True),
 	("NTLMSSP_NEGOTIATE_SEAL",			negotiate_seal,				False),
 	("NTLMSSP_NEGOTIATE_SIGN",			negotiate_sign,				False),
