@@ -12,12 +12,14 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         pass
 
     def __init__(self, users, default_login=False, unsupported_flags=0, version=1):
-        no_support_security = NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY| NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE | NTLM_FLAGS.NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
-        super(HTTPServerAuthHandler,self).__init__(unsupported_flags | no_support_security, version)
+        """Initialise a simple HTTP server"""
+        #This server does not support datagram/connectionless mode, the identify flag or session security
+        unsupported_flags = unsupported_flags | NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE
+        super(HTTPServerAuthHandler,self).__init__(unsupported_flags, version)
         self.users = users
         #If this value is true, then the user will be allowed to view the login page if SSO fails
         self.default_login = default_login
-        #TODO - If clients do not respond to challenges, they should be removed from the list after a set time
+        #TODO - If clients do not respond to challenges, they should be removed from the list after a set time eg j5.Basic.TimeCache
         #Keep a list of clients and their most recent server challenges
         self.challenges = {}
 
