@@ -3,7 +3,6 @@ from cherrypy.lib import httpauth
 import logging
 
 #Provides a simple way of keeping track of when the user is logged in
-active_connections = set()
 
 # Add a Tool to our new Toolbox.
 def check_access(handler):
@@ -16,6 +15,7 @@ def check_access(handler):
             if handler.default_login:
                 raise handler.DefaultLoginRequired()
             logging.debug("Received non-ntlm authorization message: %s", msg,)
+            cherrypy.session.pop("ntlm_auth", None)
             raise cherrypy.HTTPError(401, "NTLM authentication is required. Please configure your browser to use NTLM when accessing this site.")
         logging.debug("Parsing message: %s", msg[5:].strip())
         msg = handler.parse_message(msg[5:].strip())
@@ -25,16 +25,18 @@ def check_access(handler):
             challenge = handler.get_challenge(msg, client_details)
             logging.debug("Generated challenge in response to negotiate message (client_details %r): %s", client_details, challenge)
             cherrypy.response.headers['www-authenticate'] = 'NTLM %s' % (challenge,)
+            cherrypy.session.pop("ntlm_auth", None)
             raise cherrypy.HTTPError(401)
         elif handler.is_authenticate_message(msg):
             logging.debug("Received authenticate message")
             if not handler.authentication_valid(msg, client_details):
                 logging.debug("Authenticate message was not valid")
+                cherrypy.session.pop("ntlm_auth", None)
                 if handler.default_login:
                     raise handler.DefaultLoginRequired()
                 raise cherrypy.HTTPError(401, "NTLM Authentication failure. You do not have rights to access this site.")
-            active_connections.add(client_details)
-    elif not client_details in active_connections:
+            cherrypy.session["ntlm_auth"] = (msg.UserName, msg.DomainName)
+    elif not "ntlm_auth" in cherrypy.session:
         #client has just tried to access a page which requires authorisation
         cherrypy.response.headers['www-authenticate'] = 'NTLM'
         logging.debug("Sending initial NTLM authorization request back to client")
