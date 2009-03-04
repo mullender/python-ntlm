@@ -34,10 +34,11 @@ def main(options):
     # Some global configuration; note that this could be moved into a
     # configuration file
     cherrypy.config.update({
-        'tools.encode.on': True, 'tools.encode.encoding': 'utf-8',
         'tools.decode.on': True,
-        'tools.trailing_slash.on': True,
+        'tools.encode.on': True,
+        'tools.encode.encoding': 'utf-8',
         'tools.staticdir.root': os.path.abspath(os.path.dirname(__file__)),
+        'tools.trailing_slash.on': True,
     })
     if options.host:
         cherrypy.config["server.socket_host"] = options.host

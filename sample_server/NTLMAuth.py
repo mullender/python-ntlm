@@ -42,4 +42,3 @@ def check_access(handler):
 
 cherrypy.tools.ntlm_auth = cherrypy.Tool('before_request_body', check_access)
 
-#NTLMauthtools.check_access = cherrypy.Tool('before_request_body', check_access)
