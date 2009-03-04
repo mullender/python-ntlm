@@ -7,7 +7,8 @@ active_connections = set()
 
 # Add a Tool to our new Toolbox.
 def check_access(handler):
-    #Need to keep track of where requests are comming from
+    #Need to keep track of where requests are coming from. In reality these client details aren't specific enough but they will do
+    #for the purposes of the example server.
     client_details = (cherrypy.request.remote.ip, cherrypy.request.remote.name)
     if 'authorization' in cherrypy.request.headers:
         msg = cherrypy.request.headers['authorization']
