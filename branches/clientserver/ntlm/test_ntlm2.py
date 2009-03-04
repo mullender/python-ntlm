@@ -116,6 +116,63 @@ def HexToByte( hexStr ):
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
 
+    def test_version2_authenticate_message_optional_fields(self):
+        authenticate_message = self.get_test_authenticate_message(ntlm2.NTLMAuthenticateMessageV2, 0x0201, "utf-16le")
+        authenticate_bytes = authenticate_message.get_message_contents()
+        authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
+        #Parse message to see if it is valid
+        f = StringIO.StringIO(authenticate_bytes)
+        parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
+        parse_message.verify()
+        testversion = ntlm2.NTLMVersionStructure()
+        testversion.ProductMajorVersion = 5
+        testversion.ProductMinorVersion = 0
+        testversion.ProductBuild = 2195
+        testversion.NTLMRevisionCurrent = 0xf
+
+        #Make sure that the MIC and Version get added correctly
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_mic_field(range(0,16))
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert version.ProductMajorVersion == 5
+        assert version.ProductMinorVersion == 0
+        assert version.ProductBuild == 2195
+        assert version.NTLMRevisionCurrent == 0xf
+        assert authenticate_message.get_mic_field()[:] == range(0,16)
+
+        #Make sure that the Version gets removed correctly if there is a MIC
+        authenticate_message.set_version_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()==None
+        assert authenticate_message.get_mic_field()[:] == range(0,16)
+
+        #Make sure that the MIC gets removed correctly if there is no version
+        authenticate_message.set_mic_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()== None
+        assert authenticate_message.get_mic_field() == None
+
+        #Make sure that the Version gets removed correctly if there is no MIC
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_version_field(None)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()==None
+
+        #Make sure that the MIC gets removed correctly if there is a version
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_mic_field(range(0,16))
+        authenticate_message.set_mic_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert version.ProductMajorVersion == 5
+        assert version.ProductMinorVersion == 0
+        assert version.ProductBuild == 2195
+        assert version.NTLMRevisionCurrent == 0xf
+        assert authenticate_message.get_mic_field()==None
+
     def test_little_endian_bytes(self):
         assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")
         assert ntlm2.little_endian_bytes_to_decimal(HexToByte("0090d336b734c301")) == 127003176000000000L
@@ -575,7 +632,8 @@ class TestNTLMClient(object):
             assert authenticate_message.Workstation == "SERVER".encode(encoding)
         else:
             assert authenticate_message.Workstation == "WORKSTATION".encode(encoding)
-        assert authenticate_message.MessageFields.NegotiateFlags == flags
+        if flags is not None:
+            assert authenticate_message.MessageFields.NegotiateFlags == flags
         if EncryptedRandomSessionKey is not None:
             assert authenticate_message.EncryptedRandomSessionKey == HexToByte(EncryptedRandomSessionKey)
 
@@ -608,6 +666,7 @@ class TestNTLMClient(object):
         parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
         parse_message.verify()
         self._do_test_authenticate_message_values(authenticate_message, 0x0201, v2=True)
+
 
     def test_method__create_version1_authenticate_message(self):
         #Example values taken from http://davenport.sourceforge.net/ntlm.html#theType3Message
