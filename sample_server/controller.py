@@ -37,6 +37,8 @@ def main(options):
         'tools.decode.on': True,
         'tools.encode.on': True,
         'tools.encode.encoding': 'utf-8',
+        'tools.sessions.on': True,
+        'tools.sessions.timeout': 120,
         'tools.staticdir.root': os.path.abspath(os.path.dirname(__file__)),
         'tools.trailing_slash.on': True,
     })
