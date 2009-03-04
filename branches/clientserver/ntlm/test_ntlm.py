@@ -152,7 +152,7 @@ class TestNTLMClient(object):
 
     def test_create_negotiate_class(self):
         """Tests the new method of creating ntlm negotiate messages"""
-        negotiate_message = ntlm2.NTLMNegotiateMessage(DomainName="URSA-MINOR", Workstation="LIGHTCITY")
+        negotiate_message = ntlm2.NTLMNegotiateMessageV1(DomainName="URSA-MINOR", Workstation="LIGHTCITY")
         negotiate_message.set_negotiate_flag(ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM, True)
         negotiate_bytes = negotiate_message.get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
@@ -218,7 +218,7 @@ class TestNTLMClient(object):
 
     def test_create_challenge_class(self):
         """Tests creating ntlm challenge messages using the helper class"""
-        challenge_message = ntlm2.NTLMChallengeMessage(ServerChallenge="SrvNonce")
+        challenge_message = ntlm2.NTLMChallengeMessageV1(ServerChallenge="SrvNonce")
         challenge_fields = challenge_message.MessageFields
         challenge_str = challenge_message.get_message_contents()
         challenge_b64 = base64.b64encode(challenge_str)
