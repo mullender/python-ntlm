@@ -220,10 +220,6 @@ class NTLMMessageDependentFieldsHandler(ctypes.LittleEndianStructure, FileStruct
         return disk_block
 
     @classmethod
-    def do_corrections(cls, fields, f):
-        """Handles version based inconsistencies if the NTLM message format"""
-
-    @classmethod
     def find_payload(cls, fields, max_offset):
         #Header already takes 12 bytes
         min_offset = 12
@@ -379,20 +375,6 @@ class NTLMMessageChallengeFields(NTLMMessageDependentFieldsHandler):
                 #("Version", NTLMVersionStructure),
                ]
 
-    @classmethod
-    def do_corrections(cls, fields, f):
-        #The maximum offset should include the header and the version field
-        payload_start = cls.find_payload(fields, ctypes.sizeof(cls)+20)
-        if payload_start == 32:
-            #This means that there are no Target Info fields
-            #But the final message structure includes these fields so the buffer offsets must be modified
-            fields.TargetName.BufferOffset+=16
-            fields.Reserved = (ctypes.c_uint8 * 8)(*[0,0,0,0,0,0,0,0])
-            fields.TargetInfo.Len = 0
-            fields.TargetInfo.MaxLen = 0
-            fields.TargetInfo.BufferOffset = 48
-            f.seek(32)
-
 #-----------------------------------------------------------------------------------------------
 # NTLMMessageAuthenticateFields
 #-----------------------------------------------------------------------------------------------
@@ -409,24 +391,6 @@ class NTLMMessageAuthenticateFields(NTLMMessageDependentFieldsHandler):
                 #("Version", NTLMVersionStructure),
                 #TODO - MIC should be here, shouldn't it?
                ]
-
-    @classmethod
-    def do_corrections(cls, fields, f):
-        #The maximum offset should include the header, the version field and the MIC
-        payload_start = cls.find_payload(fields, ctypes.sizeof(cls)+36)
-        if payload_start == 52:
-            #This means that session key and flags will be missing from the message being read
-            #But the final message structure includes these fields so the buffer offsets must be modified
-            fields.LmChallengeResponse.BufferOffset+=12
-            fields.NtChallengeResponse.BufferOffset+=12
-            fields.DomainName.BufferOffset+=12
-            fields.UserName.BufferOffset+=12
-            fields.Workstation.BufferOffset+=12
-            fields.EncryptedRandomSessionKey.Len = 0
-            fields.EncryptedRandomSessionKey.MaxLen = 0
-            fields.EncryptedRandomSessionKey.BufferOffset = 64
-            fields.NegotiateFlags = 0
-            f.seek(52)
 
 #-----------------------------------------------------------------------------------------------
 # NTLMMessageDependentFields
@@ -451,10 +415,6 @@ class NTLMMessageDependentFields(ctypes.Union, FileStructure):
         else:
             raise ValueError("Unknown MessageType %r" % (MessageType,))
         fields = fields_class.read(f, size)
-        #At this point, it is possible that fields have been read, which are not contained in the message if the message was sent by an
-        #older client. Or in the case of the MIC, which is not currently supported, that there are still fields left before the payload.
-        #Either way, "f" does not neccessarily point to the front of the payload at this point.
-        fields_class.do_corrections(fields, f)
         if size is None:
            size = ctypes.sizeof(fields)
         field_bytes = ctypes.cast(ctypes.pointer(fields), ctypes.POINTER(ctypes.c_uint8 * size)).contents
@@ -501,6 +461,10 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
     oem = None
 
     @classmethod
+    def version(cls):
+        return 1
+
+    @classmethod
     def read(cls, f, size=None):
         header = NTLMMessageHeader.read(f)
         if header.MessageType == NTLM_MESSAGE_TYPE.NtLmNegotiate.const:
@@ -522,12 +486,15 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
             message = cls()
         message.Header = header
         message.MessageDependentFields = NTLMMessageDependentFields.read(f, MessageType=header.MessageType)
+        #At this point, it is possible that fields have been read, which are not contained in the message if the message was sent by an
+        #older client. Or in the case of the MIC, which is not currently supported, that there are still fields left before the payload.
+        #Either way, "f" does not neccessarily point to the front of the payload at this point.
+        message.do_corrections(f)
         message.payload = message.MessageFields.read_payload(f)
         return message
 
-    @classmethod
-    def version(cls):
-        return 1
+    def do_corrections(self, f):
+            """Handles version based inconsistencies if the NTLM message format"""
 
     def get_message_fields(self):
         """Returns the fields appropriate to the MessageType"""
@@ -576,7 +543,6 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
 
     def get_optional_length(self):
         """Returns the length of optional Version and MIC fields"""
-        # TODO: include MIC evaluation
         if self.MessageFields.NegotiateFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_VERSION:
             return 8
         return 0
@@ -622,7 +588,7 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
         current_fields[name] = ""
         self.set_string_fields(current_fields)
 
-    def set_string_fields(self, field_values, optional_length_change=0):
+    def set_string_fields(self, field_values, optional_length_change=0, length_change_offset=0):
         """regenerates the payload with the field_values given"""
         MessageFields = self.MessageFields
         HeaderSize = ctypes.sizeof(self.Header) + ctypes.sizeof(MessageFields)
@@ -631,17 +597,25 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
         new_payload = (ctypes.c_uint8*new_payload_size)()
         source_pos = copy_pos = optional_length
 
-        #Check whether the NTLMSSP_NEGOTIATE_VERSION flag has been changed
+        #Check whether the NTLMSSP_NEGOTIATE_VERSION flag or MIC has been added or removed
         if optional_length_change == 0:
             new_payload[0:optional_length] = self.payload[0:optional_length]
         else:
+            #Copy the payload up to the point where optional field is added or removed
+            new_payload[0:length_change_offset] = self.payload[0:length_change_offset]
+            #Copy the payload after the point where an optional field is added
+            if optional_length_change > 0:
+                new_payload[length_change_offset + optional_length_change:optional_length] = self.payload[length_change_offset:optional_length-optional_length_change]
+            #Copy the payload after the point where an optional field is removed
+            elif optional_length:
+                new_payload[length_change_offset:optional_length] = self.payload[length_change_offset - optional_length_change:optional_length-optional_length_change]
             source_pos = source_pos - optional_length_change
 
         for field_name, value in field_values.items():
             value = value or ""
             FieldHeader = getattr(MessageFields, field_name)
             FieldHeader.Len = FieldHeader.MaxLen = field_len = len(value)
-            FieldHeader.BufferOffset = HeaderSize + source_pos
+            FieldHeader.BufferOffset = HeaderSize + copy_pos
             new_pos = copy_pos + field_len
             new_payload[copy_pos:new_pos] = (ctypes.c_uint8*field_len)(*[ord(b) for b in value])
             copy_pos = new_pos
@@ -1422,6 +1396,20 @@ class NTLMChallengeMessageBase(NTLMMessage):
             return TargetInfo
         return None
 
+    def do_corrections(self, f):
+        fields = self.MessageFields
+        #The maximum offset should include the header and the version field
+        payload_start = fields.find_payload(fields, ctypes.sizeof(fields.__class__)+20)
+        if payload_start == 32:
+            #This means that there are no Target Info fields
+            #But the final message structure includes these fields so the buffer offsets must be modified
+            fields.TargetName.BufferOffset+=16
+            fields.Reserved = (ctypes.c_uint8 * 8)(*[0,0,0,0,0,0,0,0])
+            fields.TargetInfo.Len = 0
+            fields.TargetInfo.MaxLen = 0
+            fields.TargetInfo.BufferOffset = 48
+            f.seek(32)
+
     TargetName = StringProperty("TargetName")
     ServerChallenge = BinaryProperty("ServerChallenge")
     # TODO: handle AV_PAIRs here
@@ -1471,6 +1459,7 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
 
     def __init__(self, NegFlg=None, LmChallengeResponse=None, NtChallengeResponse=None, DomainName=None, UserName=None, Workstation=None, EncryptedRandomSessionKey=None):
         """Constructs a new NTLM Challenge Message"""
+        self.contains_mic=False
         self.Header.Signature = NTLM_PROTOCOL_SIGNATURE
         self.Header.MessageType = NTLM_MESSAGE_TYPE.NtLmAuthenticate.const
         if NegFlg is not None:
@@ -1481,6 +1470,57 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
         self.UserName = UserName
         self.Workstation = Workstation
         self.EncryptedRandomSessionKey = EncryptedRandomSessionKey
+
+    def do_corrections(self, f):
+        fields = self.MessageFields
+        #The maximum offset should include the header, the version field and the MIC
+        payload_start = fields.find_payload(fields, ctypes.sizeof(fields.__class__)+36)
+        if payload_start == 52:
+            #This means that session key and flags will be missing from the message being read
+            #But the final message structure includes these fields so the buffer offsets must be modified
+            fields.LmChallengeResponse.BufferOffset+=12
+            fields.NtChallengeResponse.BufferOffset+=12
+            fields.DomainName.BufferOffset+=12
+            fields.UserName.BufferOffset+=12
+            fields.Workstation.BufferOffset+=12
+            fields.EncryptedRandomSessionKey.Len = 0
+            fields.EncryptedRandomSessionKey.MaxLen = 0
+            fields.EncryptedRandomSessionKey.BufferOffset = 64
+            fields.NegotiateFlags = 0
+            f.seek(52)
+        else:
+            self.contains_mic=payload_start > 75
+
+    def get_optional_length(self):
+        """Returns the length of optional Version and MIC fields"""
+        if not self.contains_mic:
+            return super(NTLMAuthenticateMessageBase, self).get_optional_length()
+        return super(NTLMAuthenticateMessageBase, self).get_optional_length() + 16
+
+    def set_mic_field(self, mic):
+        offset = super(NTLMAuthenticateMessageBase, self).get_optional_length()
+        if mic is None:
+            if self.contains_mic:
+                self.set_string_fields(self.get_string_fields(), -16, offset)
+                self.contains_mic=False
+        elif len(mic) != 16:
+            raise NTLM_Exception("In NTLMMessage.set_version_field(self, version), version must be None or and 16 byte value.")
+        else:
+            if not self.contains_mic:
+                self.contains_mic=True
+                self.set_string_fields(self.get_string_fields(), 16, offset)
+            if not isinstance(mic, ctypes.c_uint8 * 16):
+                mic = (ctypes.c_uint8 * 16)(*mic)
+            for x in xrange(0, 16):
+                self.payload[x+offset] = mic[x]
+
+    def get_mic_field(self):
+        """Gets the version field, if present"""
+        offset = super(NTLMAuthenticateMessageBase, self).get_optional_length()
+        if self.contains_mic:
+            return (ctypes.c_uint8*16)(*self.payload[offset:offset+16])
+        else:
+            return None
 
     @classmethod
     def create(cls, client_object, challenge_message, neg_message=None):
