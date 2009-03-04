@@ -557,7 +557,7 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
             if not field_name.startswith("Message") and field_name.endswith("Fields"):
                 format_dict[field_name] = getattr(self, field_name)
         HeaderSize = ctypes.sizeof(self.Header) + ctypes.sizeof(messagefields)
-        format_dict["Header Size"] = HeaderSize
+        format_dict["Header Size"] = (HeaderSize, ctypes.sizeof(self.Header), ctypes.sizeof(messagefields))
         for field_name, field_type in messagefields._fields_:
             value = getattr(messagefields, field_name)
             if field_name in string_fields and field_name != "EncryptedRandomSessionKey":
