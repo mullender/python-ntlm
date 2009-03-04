@@ -12,5 +12,6 @@ class TestPage(object):
 
     @cherrypy.expose
     def index(self, **kwargs):
-        tmpl = self.loader.load('index.html')
-        return tmpl.generate(title='Test Page', body="This is a test page").render('html', doctype='html')
+        tmpl = self.loader.load('testpage.html')
+        ntlm_user, ntlm_domain = cherrypy.session.get("ntlm_auth", (None, None))
+        return tmpl.generate(title='Test Page', body="This is a test page", ntlm_user=ntlm_user, ntlm_domain=ntlm_domain).render('html', doctype='html')
