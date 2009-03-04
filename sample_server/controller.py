@@ -25,7 +25,7 @@ class Root(object):
         tmpl = loader.load('index.html')
         return tmpl.generate(title='Index Page', body="This is the index page").render('html', doctype='html')
 
-def main():
+def main(options):
     data = {} # We'll replace this later
     users = {"admin": "secretPassword",
              "editor": "otherPassword",
@@ -47,16 +47,22 @@ def main():
         },
         '/test_page': {'tools.ntlm_auth.on': True,
                        #'tools.ntlm_auth.realm' : 'Some site',
-                       'tools.ntlm_auth.handler': HTTPServerAuthHandler(users = users, version=2)},
+                       'tools.ntlm_auth.handler': HTTPServerAuthHandler(users = users, version=options.ntlm_version)},
     })
 
 if __name__ == '__main__':
     import sys
     import optparse
     optparser = optparse.OptionParser()
-    optparser.add_option("","--loglevel",
-                    type="string",dest="loglevel",default="warn",
+    optparser.add_option("", "--loglevel",
+                    type="string", dest="loglevel", default="warn",
                     help="Logging level. Options are: notset, debug, info, warn, error, fatal. [warn]")
+    optparser.add_option("-1", "--version1",
+                    action="store_const", dest="ntlm_version", default=1, const=1,
+                    help="Require NTLM Version 1")
+    optparser.add_option("-2", "--version2",
+                    action="store_const", dest="ntlm_version", const=2,
+                    help="Require NTLM Version 2")
     options, arguments = optparser.parse_args()
     if arguments:
         optparser.error("Unexpected arguments %s" % (" ".join(arguments)))
@@ -66,5 +72,5 @@ if __name__ == '__main__':
     except AttributeError:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.error("Unknown logging level '%s', switching to DEBUG loglevel." % options.loglevel)
-    main()
+    main(options)
 
