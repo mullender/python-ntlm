@@ -6,6 +6,7 @@ import NTLMAuth
 from ntlm.HTTPServerAuthHandler import HTTPServerAuthHandler
 from genshi.template import TemplateLoader
 from TestPage import TestPage
+import logging
 
 loader = TemplateLoader(
     os.path.join(os.path.dirname(__file__), 'templates'),
@@ -50,4 +51,7 @@ def main():
     })
 
 if __name__ == '__main__':
+    import sys
+    if "--debug" in sys.argv:
+        logging.getLogger().setLevel(logging.DEBUG)
     main()
