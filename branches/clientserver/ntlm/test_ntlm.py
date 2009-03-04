@@ -154,6 +154,7 @@ class TestNTLMClient(object):
         """Tests the new method of creating ntlm negotiate messages"""
         negotiate_message = ntlm2.NTLMNegotiateMessageV1(DomainName="URSA-MINOR", Workstation="LIGHTCITY")
         negotiate_message.set_negotiate_flag(ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM, True)
+        negotiate_message.set_negotiate_flag(ntlm2.NTLM_FLAGS.NTLMSSP_REQUEST_TARGET, False)
         negotiate_bytes = negotiate_message.get_message_contents()
         negotiate_b64 = base64.b64encode(negotiate_bytes)
         expected_b64 = "TlRMTVNTUAABAAAAA7IAAAoACgApAAAACQAJACAAAABMSUdIVENJVFlVUlNBLU1JTk9S"
