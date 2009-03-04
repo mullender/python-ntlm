@@ -1153,8 +1153,8 @@ class ServerInterface(NTLMInterface):
             encoding = msg.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
             domainname = msg.DomainName.decode(encoding) if encoding else msg.DomainName
             username = msg.UserName.decode(encoding) if encoding else  msg.UserName
-            autheniticated_response = self.get_authenticated_response(msg, NegFlg, username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
-            if not autheniticated_response:
+            authenticated_response = self.get_authenticated_response(msg, NegFlg, username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
+            if not authenticated_response:
                 return False
             #TODO - Handle calculation of session keys where required by NegFlgs
             """The client MUST compute the expected session key for signing and encryption, which it sends to the
@@ -1163,7 +1163,7 @@ class ServerInterface(NTLMInterface):
                 response, and compute a response. The response MUST be signed and/or encrypted and sent to the
                 client."""
 
-            self.create_session_keys(autheniticated_response)
+            self.create_session_keys(authenticated_response)
             return True
         except:
             return False
