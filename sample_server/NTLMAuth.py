@@ -13,12 +13,14 @@ def check_access(handler):
                 raise handler.DefaultLoginRequired()
             logging.debug("Received non-ntlm authorization message: %s", msg,)
             raise cherrypy.HTTPError(401, "NTLM authentication is required. Please configure your browser to use NTLM when accessing this site.")
+        logging.debug("Parsing message: %s", msg[5:].strip())
         msg = handler.parse_message(msg[5:].strip())
         logging.debug("Verifying msg: %s", msg.pformat())
         msg.verify()
         if handler.is_negotiate_message(msg):
-            logging.debug("Generating challenge in response to negotiate message (client_details %r)", client_details)
-            cherrypy.response.headers['www-authenticate'] = 'NTLM %s'%(handler.get_challenge(msg, client_details))
+            challenge = handler.get_challenge(msg, client_details)
+            logging.debug("Generated challenge in response to negotiate message (client_details %r): %s", client_details, challenge)
+            cherrypy.response.headers['www-authenticate'] = 'NTLM %s' % (challenge,)
             raise cherrypy.HTTPError(401)
         elif handler.is_authenticate_message(msg):
             logging.debug("Received authenticate message")
