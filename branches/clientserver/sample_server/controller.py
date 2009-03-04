@@ -52,6 +52,19 @@ def main():
 
 if __name__ == '__main__':
     import sys
-    if "--debug" in sys.argv:
+    import optparse
+    optparser = optparse.OptionParser()
+    optparser.add_option("","--loglevel",
+                    type="string",dest="loglevel",default="warn",
+                    help="Logging level. Options are: notset, debug, info, warn, error, fatal. [warn]")
+    options, arguments = optparser.parse_args()
+    if arguments:
+        optparser.error("Unexpected arguments %s" % (" ".join(arguments)))
+    try:
+        loglevel = getattr(logging, options.loglevel.upper())
+        logging.getLogger().setLevel(loglevel)
+    except AttributeError:
         logging.getLogger().setLevel(logging.DEBUG)
+        logging.error("Unknown logging level '%s', switching to DEBUG loglevel." % options.loglevel)
     main()
+
