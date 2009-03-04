@@ -1,7 +1,6 @@
 import cherrypy
 from cherrypy.lib import httpauth
 import logging
-logging.getLogger().setLevel(logging.DEBUG)
 
 #Provides a simple way of keeping track of when the user is logged in
 active_connections = set()
