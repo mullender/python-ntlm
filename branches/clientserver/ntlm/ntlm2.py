@@ -359,7 +359,7 @@ class NTLMMessageNegotiateFields(NTLMMessageDependentFieldsHandler):
     _fields_ = [("NegotiateFlags", ctypes.c_uint32),
                 ("DomainName", StringHeader),
                 ("Workstation", StringHeader),
-                #("Version", NTLMVersionStructure),
+                #("Version", NTLMVersionStructure), This is placed at the beginning of the payload as it is an optional field
                ]
 
 #-----------------------------------------------------------------------------------------------
@@ -373,7 +373,7 @@ class NTLMMessageChallengeFields(NTLMMessageDependentFieldsHandler):
                 ("ServerChallenge", ctypes.c_uint8 * 8),
                 ("Reserved", ctypes.c_uint8 * 8),
                 ("TargetInfo", StringHeader),
-                #("Version", NTLMVersionStructure),
+                #("Version", NTLMVersionStructure), This is placed at the beginning of the payload as it is an optional field
                ]
 
 #-----------------------------------------------------------------------------------------------
@@ -389,8 +389,8 @@ class NTLMMessageAuthenticateFields(NTLMMessageDependentFieldsHandler):
                 ("Workstation", StringHeader),
                 ("EncryptedRandomSessionKey", StringHeader),
                 ("NegotiateFlags", ctypes.c_uint32),
-                #("Version", NTLMVersionStructure),
-                #TODO - MIC should be here, shouldn't it?
+                #("Version", NTLMVersionStructure), This is placed at the beginning of the payload as it is an optional field
+                #("MIC", ctypes.c_uint8*16), This is placed at the beginning of the payload as it is an optional field
                ]
 
 #-----------------------------------------------------------------------------------------------
