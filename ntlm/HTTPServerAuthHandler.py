@@ -1,9 +1,6 @@
 # Create a new Toolbox.
 import ntlm2
-from ntlm2 import WinError, NTLM_Exception, NTLM_FLAGS
-import base64
 import socket
-import StringIO
 
 class HTTPServerAuthHandler(ntlm2.ServerInterface):
 
@@ -14,7 +11,7 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
     def __init__(self, users, default_login=False, unsupported_flags=0, version=1):
         """Initialise a simple HTTP server"""
         #This server does not support datagram/connectionless mode, the identify flag or session security
-        unsupported_flags = unsupported_flags | NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE
+        unsupported_flags = unsupported_flags | ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY | ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM | ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_KEY_EXCHANGE
         super(HTTPServerAuthHandler,self).__init__(unsupported_flags, version)
         self.users = users
         #If this value is true, then the user will be allowed to view the login page if SSO fails
@@ -23,73 +20,25 @@ class HTTPServerAuthHandler(ntlm2.ServerInterface):
         #Keep a list of clients and their most recent server challenges
         self.challenges = {}
 
-    def is_negotiate_message(self, msg):
-        return msg.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmNegotiate.const
+    def cache_challenge(self, client_details, server_challenge, flags):
+        """Must provide a means of caching the last challenge that the server sent the client with client_details."""
+        #A very simple cache, which does not even delete old challenges if no response was received
+        self.challenges[client_details] = {"flags" : flags, "server_challenge" : server_challenge}
 
-    def is_authenticate_message(self, msg):
-        return msg.Header.MessageType == ntlm2.NTLM_MESSAGE_TYPE.NtLmAuthenticate.const
+    def get_cached_challenge(self, client_details):
+        """Must provide a means of retrieving the last challenge that the server sent the client with client_details."""
+        return self.challenges.get(client_details, None)
 
-    def parse_message(self, message):
-        message = StringIO.StringIO(base64.b64decode(message))
-        return self.challenge_class.read(message)
+    def delete_cached_challenge(self, client_details):
+        """Must provide a means of deleting the last challenge that the server sent the client with client_details."""
+        del self.challenges[client_details]
 
-    def get_challenge(self, msg, client_details, additional_flags=0):
-        """Create a challenge message. If no client_flags or additional_flags are set, only the default challenge flags will be used"""
-        client_flags=msg.MessageFields.NegotiateFlags
-        msg = self.challenge_class.create(client_flags, additional_flags, self)
-
-        #In Connectionless mode, the server does not store the negotiated flags
-        if msg.MessageFields.NegotiateFlags & ntlm2.NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM:
-            self.challenges[client_details] = {"flags" : None,
-                                               "server_challenge" : "".join([chr(x) for x in msg.ServerChallenge])}
-        else:
-            self.challenges[client_details] = {"flags" : msg.MessageFields.NegotiateFlags,
-                                               "server_challenge" : "".join([chr(x) for x in msg.ServerChallenge])}
-
-        return base64.b64encode(msg.get_message_contents())
-
-    def authentication_valid(self, msg, client_details):
-        if self.blocked():
-            raise WinError("The server is blocked from sending NTLM Authentication messages", WinError.STATUS_NTLM_BLOCKED)
-        #In connectionless mode, flag negotiation is only completed at this point so check that security levels are acceptable
-        if self.request_datagram() and self.require_128bit_encryption() and not msg.MessageFields.NegotiateFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_128:
-            raise WinError("NTLM negotiate flags do not request 128 bit encryption. The server requires 128 bit encryption", WinError.SEC_E_UNSUPPORTED_FUNCTION)
-        try:
-            if not self.is_authenticate_message(msg) or not msg.UserName:
-                return False
-
-            temp=self.challenges.get(client_details, None)
-            if temp is None:
-                return False
-            #Remove challenge from list regardless of whether the client authentication is valid. All that matters is that the client has responded
-            del self.challenges[client_details]
-
-            if temp["flags"] == None:
-                #"temp["flags"] == None" should only really occur in connectionless mode
-                NegFlg = msg.MessageFields.NegotiateFlags
-            else:
-                NegFlg = temp["flags"]
-
-            encoding = msg.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
-            domainname = msg.DomainName.decode(encoding) if encoding else msg.DomainName
-            username = msg.UserName.decode(encoding) if encoding else  msg.UserName
-            if not username in self.users:
-                return False
-
-            autheniticated_response = msg.authenticated_response(NegFlg, self.users[username], username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
-            if not autheniticated_response:
-                return False
-          #TODO - Handle calculation of session keys where required by NegFlgs
-            """The client MUST compute the expected session key for signing and encryption, which it sends to the
-                server in the AUTHENTICATE_MESSAGE (section 3.1.5.2.1). Using this key from the
-                AUTHENTICATE_MESSAGE, the server MUST check the signature and/or decrypt the protocol
-                response, and compute a response. The response MUST be signed and/or encrypted and sent to the
-                client."""
-
-            self.create_session_keys(autheniticated_response)
-            return True
-        except:
-            return False
+    def get_authenticated_response(self, message, NegFlg, username, domainname, server_challenge, max_lifetime, encoding):
+        """Must generate a ResponseData object and compare its values to the values in "message" (which is an Authenticate message).
+           If the message values match the calculated values, return the ResponseData object otherwise, return None."""
+        if not username in self.users:
+            return None
+        return message.authenticated_response(NegFlg, self.users[username], username, domainname, server_challenge, max_lifetime, encoding)
 
     def negotiated_security_ok(self, NegFlg):
         return True
