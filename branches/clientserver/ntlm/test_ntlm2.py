@@ -116,63 +116,6 @@ def HexToByte( hexStr ):
 class TestNTLMClient(object):
     """Tests based on example at http://www.innovation.ch/personal/ronald/ntlm.html. Modified for NTLMv2 using [MS-NLMP] page 75 on..."""
 
-    def test_version2_authenticate_message_optional_fields(self):
-        authenticate_message = self.get_test_authenticate_message(ntlm2.NTLMAuthenticateMessageV2, 0x0201, "utf-16le")
-        authenticate_bytes = authenticate_message.get_message_contents()
-        authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
-        #Parse message to see if it is valid
-        f = StringIO.StringIO(authenticate_bytes)
-        parse_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
-        parse_message.verify()
-        testversion = ntlm2.NTLMVersionStructure()
-        testversion.ProductMajorVersion = 5
-        testversion.ProductMinorVersion = 0
-        testversion.ProductBuild = 2195
-        testversion.NTLMRevisionCurrent = 0xf
-
-        #Make sure that the MIC and Version get added correctly
-        authenticate_message.set_version_field(testversion)
-        authenticate_message.set_mic_field(range(0,16))
-        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
-        version = authenticate_message.get_version_field()
-        assert version.ProductMajorVersion == 5
-        assert version.ProductMinorVersion == 0
-        assert version.ProductBuild == 2195
-        assert version.NTLMRevisionCurrent == 0xf
-        assert authenticate_message.get_mic_field()[:] == range(0,16)
-
-        #Make sure that the Version gets removed correctly if there is a MIC
-        authenticate_message.set_version_field(None)
-        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
-        version = authenticate_message.get_version_field()
-        assert authenticate_message.get_version_field()==None
-        assert authenticate_message.get_mic_field()[:] == range(0,16)
-
-        #Make sure that the MIC gets removed correctly if there is no version
-        authenticate_message.set_mic_field(None)
-        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
-        version = authenticate_message.get_version_field()
-        assert authenticate_message.get_version_field()== None
-        assert authenticate_message.get_mic_field() == None
-
-        #Make sure that the Version gets removed correctly if there is no MIC
-        authenticate_message.set_version_field(testversion)
-        authenticate_message.set_version_field(None)
-        version = authenticate_message.get_version_field()
-        assert authenticate_message.get_version_field()==None
-
-        #Make sure that the MIC gets removed correctly if there is a version
-        authenticate_message.set_version_field(testversion)
-        authenticate_message.set_mic_field(range(0,16))
-        authenticate_message.set_mic_field(None)
-        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
-        version = authenticate_message.get_version_field()
-        assert version.ProductMajorVersion == 5
-        assert version.ProductMinorVersion == 0
-        assert version.ProductBuild == 2195
-        assert version.NTLMRevisionCurrent == 0xf
-        assert authenticate_message.get_mic_field()==None
-
     def test_little_endian_bytes(self):
         assert ntlm2.little_endian_bytes(127003176000000000L) == HexToByte("0090d336b734c301")
         assert ntlm2.little_endian_bytes_to_decimal(HexToByte("0090d336b734c301")) == 127003176000000000L
@@ -722,6 +665,66 @@ class TestNTLMClient(object):
         assert authenticate_message.DomainName == "golg"
         assert authenticate_message.UserName == "admin"
         assert authenticate_message.Workstation == "GOLG"
+
+    def test_version2_authenticate_message_optional_fields(self):
+        authenticate_message = self.get_test_authenticate_message(ntlm2.NTLMAuthenticateMessageV2, 0x0201, "utf-16le")
+        testversion = ntlm2.NTLMVersionStructure()
+        testversion.ProductMajorVersion = 5
+        testversion.ProductMinorVersion = 0
+        testversion.ProductBuild = 2195
+        testversion.NTLMRevisionCurrent = 0xf
+        #Add Mic and version info
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_mic_field(range(0,16))
+        #Create the message and then read it in again to make sure that Version and MIC are detected during parsing
+        authenticate_bytes = authenticate_message.get_message_contents()
+        authenticate_bytes = "".join([chr(x) for x in authenticate_bytes])
+        #Parse message to see if it is valid
+        f = StringIO.StringIO(authenticate_bytes)
+        authenticate_message = ntlm2.NTLMAuthenticateMessageV2.read(f)
+        authenticate_message.verify()
+        assert authenticate_message.contains_mic
+
+        #Make sure that the MIC and Version get added correctly
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert version.ProductMajorVersion == 5
+        assert version.ProductMinorVersion == 0
+        assert version.ProductBuild == 2195
+        assert version.NTLMRevisionCurrent == 0xf
+        assert authenticate_message.get_mic_field()[:] == range(0,16)
+
+        #Make sure that the Version gets removed correctly if there is a MIC
+        authenticate_message.set_version_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()==None
+        assert authenticate_message.get_mic_field()[:] == range(0,16)
+
+        #Make sure that the MIC gets removed correctly if there is no version
+        authenticate_message.set_mic_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()== None
+        assert authenticate_message.get_mic_field() == None
+
+        #Make sure that the Version gets removed correctly if there is no MIC
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_version_field(None)
+        version = authenticate_message.get_version_field()
+        assert authenticate_message.get_version_field()==None
+
+        #Make sure that the MIC gets removed correctly if there is a version
+        authenticate_message.set_version_field(testversion)
+        authenticate_message.set_mic_field(range(0,16))
+        authenticate_message.set_mic_field(None)
+        self._do_test_authenticate_message_values(authenticate_message, None, v2=True)
+        version = authenticate_message.get_version_field()
+        assert version.ProductMajorVersion == 5
+        assert version.ProductMinorVersion == 0
+        assert version.ProductBuild == 2195
+        assert version.NTLMRevisionCurrent == 0xf
+        assert authenticate_message.get_mic_field()==None
 
 #TODO - Setup tests, which make sure that flags are set automatically as per the [MS-NLMP] specification
 #     - When certain flags are set, the spec demands that other flags are set/not set in each of the message types
