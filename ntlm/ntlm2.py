@@ -567,6 +567,7 @@ class NTLMMessage(ctypes.LittleEndianStructure, FileStructure):
             else:
                 format_dict[field_name] = value
         # format_dict["payload"] = len(self.payload)
+        format_dict["type"] = type(self)
         return pprint.pformat(format_dict)
 
 
