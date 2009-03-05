@@ -14,7 +14,7 @@ class SysCheat:
 
 ntlm2.sys=SysCheat()
 
-class ATestServer(ntlm2.ServerInterface):
+class ATestServer(ntlm2.NTLMServerBase):
     randomvalue = 0
     timestamp = 0
 
@@ -55,7 +55,7 @@ class ATestServer(ntlm2.ServerInterface):
     def get_DNS_forest_name(self):
         return self.dns_forest_name
 
-class ATestClient(ntlm2.ClientInterface):
+class ATestClient(ntlm2.NTLMClientBase):
     randomvalue = 0
     timestamp = 0
 

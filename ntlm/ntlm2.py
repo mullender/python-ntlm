@@ -819,10 +819,10 @@ class WinError(Exception):
         self.id = id
 
 #-----------------------------------------------------------------------------------------------
-# NTLMInterface
+# NTLMClientServer
 #-----------------------------------------------------------------------------------------------
 
-class NTLMInterface(object):
+class NTLMClientServer(object):
     class SessionKeys:
         def __init__(self, client_sign, client_seal, server_sign, server_seal):
             self.client_sign = client_sign
@@ -923,14 +923,14 @@ class NTLMInterface(object):
         return self.SessionKeys(client_sign, client_seal, server_sign, server_seal)
 
 #-----------------------------------------------------------------------------------------------
-# ClientInterface - Must be supported by NTLM client implementation
+# NTLMClientBase - Must be the base class of NTLM client implementation
 #-----------------------------------------------------------------------------------------------
 
-class ClientInterface(NTLMInterface):
+class NTLMClientBase(NTLMClientServer):
     """Provides access to information about the client machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
     def __init__(self, unsupported_flags=0, version=1):
-        super(ClientInterface,self).__init__(unsupported_flags)
+        super(NTLMClientBase,self).__init__(unsupported_flags)
 
         if version == 2:
             self.negotitate_class = NTLMNegotiateMessageV2
@@ -1021,14 +1021,14 @@ class ClientInterface(NTLMInterface):
         return self._try_request("_request_identify", set_value, NTLM_FLAGS.NTLMSSP_NEGOTIATE_IDENTIFY)
 
 #-----------------------------------------------------------------------------------------------
-# ServerInterface - Must be supported by NTLM server implementation
+# NTLMServerBase - Must be the base class of NTLM server implementation
 #-----------------------------------------------------------------------------------------------
 
-class ServerInterface(NTLMInterface):
+class NTLMServerBase(NTLMClientServer):
     """Provides access to information about the server machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
     def __init__(self, unsupported_flags=0, version=1):
-        super(ServerInterface,self).__init__(unsupported_flags)
+        super(NTLMServerBase,self).__init__(unsupported_flags)
 
         if version == 2:
             self.challenge_class = NTLMChallengeMessageV2
@@ -1190,12 +1190,12 @@ class NTLMNegotiateMessageBase(NTLMMessage):
     def create(cls, NegFlg, client_object, target_server=""):
         """Returns an NTLM negotiate message
             NegFlg              - If this value is not None, overwrite the default flags
-            client_object       - An object which implements ClientInterface. It should provide the folowing information:
+            client_object       - An object which implements NTLMClientBase. It should provide the folowing information:
                     domain      - If this value is not None, include domain in the message. Value should be an unencoded string.
                     workstation - If this value is not None, include workstation in the message. Value should be an unencoded string.
         """
-        if not isinstance(client_object, ClientInterface):
-            raise NTLMException("The 'client_object' argument passed to 'create_negotiate_message' must be of type 'ClientInterface'")
+        if not isinstance(client_object, NTLMClientBase):
+            raise NTLMException("The 'client_object' argument passed to 'create_negotiate_message' must be of type 'NTLMClientBase'")
 
         if client_object.blocked(target_server):
             raise WinError("The client is blocked from sending NTLM Authentication messages to server '%s'"%target_server, WinError.STATUS_NTLM_BLOCKED)
@@ -1397,8 +1397,8 @@ class NTLMChallengeMessageBase(NTLMMessage):
             CfgFlg              - Set of flags required by the server
             server_object       - Provides information about the server
         """
-        if not isinstance(server_object, ServerInterface):
-            raise NTLMException("The 'server_object' argument passed to 'create_challenge_message' must be of type 'ServerInterface'")
+        if not isinstance(server_object, NTLMServerBase):
+            raise NTLMException("The 'server_object' argument passed to 'create_challenge_message' must be of type 'NTLMServerBase'")
 
         NegFlg = cls._get_challenge_flags(ClientFlg, CfgFlg, server_object)
 
@@ -1607,8 +1607,8 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
     @classmethod
     def create(cls, client_object, challenge_message, neg_message=None):
         """Call this method to create an Authentication message to send to the server"""
-        if not isinstance(client_object, ClientInterface):
-            raise NTLMException("The 'client_object' argument passed to 'NTLMAuthenticateMessageBase.create' must be of type 'ClientInterface'")
+        if not isinstance(client_object, NTLMClientBase):
+            raise NTLMException("The 'client_object' argument passed to 'NTLMAuthenticateMessageBase.create' must be of type 'NTLMClientBase'")
 
         NegFlg = challenge_message.MessageFields.NegotiateFlags
 
@@ -1642,7 +1642,7 @@ class NTLMAuthenticateMessageBase(NTLMMessage):
         else:
             timestamp = client_object.get_timestamp()
 
-        #The values below are optional and might not be supplied by the ClientInterface implementation
+        #The values below are optional and might not be supplied by the NTLMClientBase implementation
         client_target_name = client_object.client_supplied_target_name()
         client_binding = client_object.client_channel_bindings_unhashed()
 
