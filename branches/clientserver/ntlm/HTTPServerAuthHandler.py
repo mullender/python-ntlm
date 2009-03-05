@@ -2,7 +2,7 @@
 import ntlm2
 import socket
 
-class HTTPServerAuthHandler(ntlm2.ServerInterface):
+class HTTPServerAuthHandler(ntlm2.NTLMServerBase):
 
     class DefaultLoginRequired(Exception):
         """Raised if the HTTPServerAuthHandler allows the use of a manual login when SSO fails"""
