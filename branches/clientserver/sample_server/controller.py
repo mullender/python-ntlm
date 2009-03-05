@@ -29,7 +29,7 @@ def main(options):
     data = {} # We'll replace this later
     users = {"admin": "secretPassword",
              "editor": "otherPassword",
-             "duncan": "password"}
+             "user": "password"}
 
     # Some global configuration; note that this could be moved into a
     # configuration file
@@ -51,7 +51,6 @@ def main(options):
             'tools.staticdir.dir': 'static'
         },
         '/test_page': {'tools.ntlm_auth.on': True,
-                       #'tools.ntlm_auth.realm' : 'Some site',
                        'tools.ntlm_auth.handler': HTTPServerAuthHandler(users = users, version=options.ntlm_version)},
     })
 
@@ -77,4 +76,3 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.DEBUG)
         logging.error("Unknown logging level '%s', switching to DEBUG loglevel." % options.loglevel)
     main(options)
-
