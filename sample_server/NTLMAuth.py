@@ -2,13 +2,11 @@ import cherrypy
 from cherrypy.lib import httpauth
 import logging
 
-#Provides a simple way of keeping track of when the user is logged in
-
 # Add a Tool to our new Toolbox.
 def check_access(handler):
     #Need to keep track of where requests are coming from. In reality these client details aren't specific enough but they will do
     #for the purposes of the example server.
-    client_details = (cherrypy.request.remote.ip, cherrypy.request.remote.name)
+    client_details = (cherrypy.request.remote.ip, cherrypy.request.remote.port, cherrypy.request.remote.name)
     if 'authorization' in cherrypy.request.headers:
         msg = cherrypy.request.headers['authorization']
         if msg[0:5].lower() != "ntlm ":
@@ -39,8 +37,8 @@ def check_access(handler):
     elif not "ntlm_auth" in cherrypy.session:
         #client has just tried to access a page which requires authorisation
         cherrypy.response.headers['www-authenticate'] = 'NTLM'
+        cherrypy.response.headers['Connection'] = 'close'
         logging.debug("Sending initial NTLM authorization request back to client")
         raise cherrypy.HTTPError(401)
 
 cherrypy.tools.ntlm_auth = cherrypy.Tool('before_request_body', check_access)
-
