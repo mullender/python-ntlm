@@ -837,10 +837,19 @@ class NTLMClientServer(object):
                      |NTLM_FLAGS.NTLMSSP_NEGOTIATE_NT_ONLY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_LM_KEY | NTLM_FLAGS.NTLMSSP_NEGOTIATE_DATAGRAM
                      |NTLM_FLAGS.NTLMSSP_NEGOTIATE_SEAL | NTLM_FLAGS.NTLMSSP_NEGOTIATE_SIGN | NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM)
 
-    def __init__(self, unsupported_flags=0):
+    def __init__(self, unsupported_flags=0, version=1):
         #Set bits on this property to indicate which flags are unsupported
         self._unsupported_flags = unsupported_flags & self.optional_flags
         self.request_datagram(False)
+
+        if version == 2:
+            self.negotitate_class = NTLMNegotiateMessageV2
+            self.challenge_class = NTLMChallengeMessageV2
+            self.authenticate_class = NTLMAuthenticateMessageV2
+        else:
+            self.negotitate_class = NTLMNegotiateMessageV1
+            self.challenge_class = NTLMChallengeMessageV1
+            self.authenticate_class = NTLMAuthenticateMessageV1
 
     def supported_flags(self, flags):
         """Function filters out any flags not supported by client/server"""
@@ -930,15 +939,7 @@ class NTLMClientBase(NTLMClientServer):
     """Provides access to information about the client machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
     def __init__(self, unsupported_flags=0, version=1):
-        super(NTLMClientBase,self).__init__(unsupported_flags)
-
-        if version == 2:
-            self.negotitate_class = NTLMNegotiateMessageV2
-            self.authenticate_class = NTLMAuthenticateMessageV2
-        else:
-            self.negotitate_class = NTLMNegotiateMessageV1
-            self.authenticate_class = NTLMAuthenticateMessageV1
-
+        super(NTLMClientBase,self).__init__(unsupported_flags, version)
         self.request_integrity(False)
         self.request_replay_detect(False)
         self.request_sequence_detect(False)
@@ -1028,13 +1029,7 @@ class NTLMServerBase(NTLMClientServer):
     """Provides access to information about the server machine. All information returned as strings
        should be unencoded. It is left to the NTLM handlers to encode strings correctly."""
     def __init__(self, unsupported_flags=0, version=1):
-        super(NTLMServerBase,self).__init__(unsupported_flags)
-
-        if version == 2:
-            self.challenge_class = NTLMChallengeMessageV2
-        else:
-            self.challenge_class = NTLMChallengeMessageV1
-
+        super(NTLMServerBase,self).__init__(unsupported_flags, version)
         self._config_flags = NTLMChallengeMessageBase.DEFAULT_FLAGS
 
     @unimplemented
@@ -1131,16 +1126,30 @@ class NTLMServerBase(NTLMClientServer):
     def authentication_valid(self, msg, client_details):
         if self.blocked():
             raise WinError("The server is blocked from sending NTLM Authentication messages", WinError.STATUS_NTLM_BLOCKED)
+
         #In connectionless mode, flag negotiation is only completed at this point so check that security levels are acceptable
         if self.request_datagram() and self.require_128bit_encryption() and not msg.MessageFields.NegotiateFlags & NTLM_FLAGS.NTLMSSP_NEGOTIATE_128:
             raise WinError("NTLM negotiate flags do not request 128 bit encryption. The server requires 128 bit encryption", WinError.SEC_E_UNSUPPORTED_FUNCTION)
-        try:
-            if not self.is_authenticate_message(msg) or not msg.UserName:
-                return False
 
+        try:
+            if not self.is_authenticate_message(msg):
+                return False, {"user":"unknown", "domain":"unknown"}
+
+            #Retrieve the cached context of the server challenge sent to this client
             temp=self.get_cached_challenge(client_details)
-            if temp is None:
-                return False
+            if temp is None or not msg.UserName:
+                NegFlg = msg.MessageFields.NegotiateFlags
+                encoding = msg.unicode if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_UNICODE else msg.oem if NegFlg&NTLM_FLAGS.NTLMSSP_NEGOTIATE_OEM else None
+                #It is possible that NegFlg does not provide the correct information about the character encoding
+                if encoding:
+                    try:
+                        user, domain = msg.UserName.decode(encoding), msg.DomainName.decode(encoding)
+                    except:
+                        pass
+                else:
+                    user, domain = msg.UserName, msg.DomainName
+                return False, {"user":user if user else "unknown", "domain":domain if domain else "unknown"}
+
             #Remove challenge from list regardless of whether the client authentication is valid. All that matters is that the client has responded
             self.delete_cached_challenge(client_details)
 
@@ -1155,7 +1164,7 @@ class NTLMServerBase(NTLMClientServer):
             username = msg.UserName.decode(encoding) if encoding else  msg.UserName
             authenticated_response = self.get_authenticated_response(msg, NegFlg, username, domainname, temp["server_challenge"], self.max_lifetime(), encoding)
             if not authenticated_response:
-                return False
+                return False, {"user":username, "domain":domainname}
             #TODO - Handle calculation of session keys where required by NegFlgs
             """The client MUST compute the expected session key for signing and encryption, which it sends to the
                 server in the AUTHENTICATE_MESSAGE (section 3.1.5.2.1). Using this key from the
@@ -1164,9 +1173,9 @@ class NTLMServerBase(NTLMClientServer):
                 client."""
 
             self.create_session_keys(authenticated_response)
-            return True
+            return True, {"user":username, "domain":domainname}
         except:
-            return False
+            return False, {"user":username, "domain":domainname}
 
 #-----------------------------------------------------------------------------------------------
 # NTLMNegotiateMessageBase
