@@ -27,13 +27,14 @@ def check_access(handler):
             raise cherrypy.HTTPError(401)
         elif handler.is_authenticate_message(msg):
             logging.debug("Received authenticate message")
-            if not handler.authentication_valid(msg, client_details):
+            success, userinfo = handler.authentication_valid(msg, client_details)
+            if not success:
                 logging.debug("Authenticate message was not valid")
                 cherrypy.session.pop("ntlm_auth", None)
                 if handler.default_login:
                     raise handler.DefaultLoginRequired()
                 raise cherrypy.HTTPError(401, "NTLM Authentication failure. You do not have rights to access this site.")
-            cherrypy.session["ntlm_auth"] = (msg.UserName, msg.DomainName)
+            cherrypy.session["ntlm_auth"] = (userinfo["user"], userinfo["domain"])
     elif not "ntlm_auth" in cherrypy.session:
         #client has just tried to access a page which requires authorisation
         cherrypy.response.headers['www-authenticate'] = 'NTLM'
