@@ -910,7 +910,7 @@ class NTLMClientServer(object):
         #  In Windows 7, this variable is set to TRUE.
         return False #TODO this should return True in Windows 7 - see [MS_NLMP] page 84 <33>
 
-    def create_session_keys(self, responsedata):
+    def create_session_keys(self, username, domainname, responsedata):
         """This method must be called by the client and server after authentication in order to generate the session keys"""
         #TODO implement this function
         client_sign = client_seal = server_sign = server_seal = None
@@ -929,7 +929,11 @@ class NTLMClientServer(object):
         Set ClientSealingKey to SEALKEY(NegFlg, ExportedSessionKey, "Client")
         Set ServerSealingKey to SEALKEY(NegFlg, ExportedSessionKey, "Server")
         RC4Init(ClientHandle, ClientSealingKey) RC4Init(ServerHandle, ServerSealingKey)"""
-        return self.SessionKeys(client_sign, client_seal, server_sign, server_seal)
+
+        #store -> self.SessionKeys(client_sign, client_seal, server_sign, server_seal)
+
+    def get_session_keys(self, username, domainname):
+        pass
 
 #-----------------------------------------------------------------------------------------------
 # NTLMClientBase - Must be the base class of NTLM client implementation
@@ -1172,7 +1176,7 @@ class NTLMServerBase(NTLMClientServer):
                 response, and compute a response. The response MUST be signed and/or encrypted and sent to the
                 client."""
 
-            self.create_session_keys(authenticated_response)
+            self.create_session_keys(username, domainname, authenticated_response)
             return True, {"user":username, "domain":domainname}
         except:
             return False, {"user":username, "domain":domainname}
