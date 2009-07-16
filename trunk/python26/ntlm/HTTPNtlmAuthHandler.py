@@ -27,7 +27,7 @@ class AbstractNtlmAuthHandler:
     def http_error_authentication_required(self, auth_header_field, req, fp, headers):
         auth_header_value = headers.get(auth_header_field, None)
         if auth_header_field:
-            if 'ntlm' in auth_header_value.lower():
+            if auth_header_value is not None and 'ntlm' in auth_header_value.lower():
                 fp.close()
                 return self.retry_using_http_NTLM_auth(req, auth_header_field, None, headers)
 
