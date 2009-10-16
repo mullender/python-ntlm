@@ -2,7 +2,7 @@
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation, either
 # version 3 of the License, or (at your option) any later version.
- 
+
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
@@ -17,12 +17,15 @@ from urllib import addinfourl
 import ntlm
 
 class AbstractNtlmAuthHandler:
-    
-    def __init__(self, password_mgr=None):
+    def __init__(self, password_mgr=None, debuglevel=0):
         if password_mgr is None:
             password_mgr = HTTPPasswordMgr()
         self.passwd = password_mgr
         self.add_password = self.passwd.add_password
+        self._debuglevel = debuglevel
+
+    def set_http_debuglevel(self, level):
+        self._debuglevel = level
 
     def http_error_authentication_required(self, auth_header_field, req, fp, headers):
         auth_header_value = headers.get(auth_header_field, None)
@@ -41,7 +44,7 @@ class AbstractNtlmAuthHandler:
             if req.headers.get(self.auth_header, None) == auth:
                 return None
             headers[self.auth_header] = auth
-            
+
             host = req.get_host()
             if not host:
                 raise urllib2.URLError('no host given')
@@ -50,6 +53,7 @@ class AbstractNtlmAuthHandler:
                 h = httplib.HTTPSConnection(host) # will parse host:port
             else:
                 h = httplib.HTTPConnection(host) # will parse host:port
+            h.set_debuglevel(self._debuglevel)
             # we must keep the connection because NTLM authenticates the connection, not single requests
             headers["Connection"] = "Keep-Alive"
             headers = dict((name.title(), val) for name, val in headers.items())
@@ -57,7 +61,7 @@ class AbstractNtlmAuthHandler:
             r = h.getresponse()
             r.begin()
             r._safe_read(int(r.getheader('content-length')))
-            if r.getheader('set-cookie'): 
+            if r.getheader('set-cookie'):
                 # this is important for some web applications that store authentication-related info in cookies (it took a long time to figure out)
                 headers['Cookie'] = r.getheader('set-cookie')
             r.fp = None # remove the reference to the socket, so that it can not be closed by the response object (we want to keep the socket open)
@@ -113,13 +117,14 @@ if __name__ == "__main__":
     auth_basic = urllib2.HTTPBasicAuthHandler(passman)
     auth_digest = urllib2.HTTPDigestAuthHandler(passman)
     auth_NTLM = HTTPNtlmAuthHandler(passman)
-    
+
     # disable proxies (just for testing)
-    proxy_handler = urllib2.ProxyHandler({}) 
+    proxy_handler = urllib2.ProxyHandler({})
 
     opener = urllib2.build_opener(proxy_handler, auth_NTLM) #, auth_digest, auth_basic)
-    
+
     urllib2.install_opener(opener)
-    
+
     response = urllib2.urlopen(url)
     print(response.read())
+
