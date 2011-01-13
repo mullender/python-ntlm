@@ -81,7 +81,10 @@ class AbstractNtlmAuthHandler:
                 def notimplemented():
                     raise NotImplementedError
                 response.readline = notimplemented
-                return addinfourl(response, response.msg, req.get_full_url())
+                infourl = addinfourl(response, response.msg, req.get_full_url())
+                infourl.code = response.status
+                infourl.msg = response.reason
+                return infourl
             except socket.error, err:
                 raise urllib2.URLError(err)
         else:
