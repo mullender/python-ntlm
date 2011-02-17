@@ -23,6 +23,7 @@ setup(name='python-ntlm',
       Windows, since on Windows it is possible to take advantage of
       platform-specific NTLM support.""",
       author='Matthijs Mullender',
+      author_email='info@zopyx.org',
       maintainer='Daniel Holth',
       maintainer_email='dholth@gmail.com',
       url="http://code.google.com/p/python-ntlm",
