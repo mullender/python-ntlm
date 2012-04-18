@@ -37,10 +37,19 @@ class AbstractNtlmAuthHandler:
     def retry_using_http_NTLM_auth(self, req, auth_header_field, realm, headers):
         user, pw = self.passwd.find_user_password(realm, req.get_full_url())
         if pw is not None:
+            user_parts = user.split('\\', 1)
+            if len(user_parts) == 1:
+                UserName = user_parts[0]
+                DomainName = ''
+                type1_flags = ntlm.NTLM_TYPE1_FLAGS & ~ntlm.NTLM_NegotiateOemDomainSupplied
+            else:
+                DomainName = user_parts[0].upper()
+                UserName = user_parts[1]
+                type1_flags = ntlm.NTLM_TYPE1_FLAGS
             # ntlm secures a socket, so we must use the same socket for the complete handshake
             headers = dict(req.headers)
             headers.update(req.unredirected_hdrs)
-            auth = 'NTLM %s' % ntlm.create_NTLM_NEGOTIATE_MESSAGE(user)
+            auth = 'NTLM %s' % ntlm.create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags)
             if req.headers.get(self.auth_header, None) == auth:
                 return None
             headers[self.auth_header] = auth
@@ -67,13 +76,6 @@ class AbstractNtlmAuthHandler:
             r.fp = None # remove the reference to the socket, so that it can not be closed by the response object (we want to keep the socket open)
             auth_header_value = r.getheader(auth_header_field, None)
             (ServerChallenge, NegotiateFlags) = ntlm.parse_NTLM_CHALLENGE_MESSAGE(auth_header_value[5:])
-            user_parts = user.split('\\', 1)
-            if len(user_parts) == 1:
-                UserName = user_parts[0]
-                DomainName = ''
-            else:
-                DomainName = user_parts[0].upper()
-                UserName = user_parts[1]
             auth = 'NTLM %s' % ntlm.create_NTLM_AUTHENTICATE_MESSAGE(ServerChallenge, UserName, DomainName, pw, NegotiateFlags)
             headers[self.auth_header] = auth
             headers["Connection"] = "Close"
