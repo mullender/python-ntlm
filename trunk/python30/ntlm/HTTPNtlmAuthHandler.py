@@ -70,8 +70,12 @@ class AbstractNtlmAuthHandler:
             auth_header_value = r.getheader(auth_header_field, None)
             (ServerChallenge, NegotiateFlags) = ntlm.parse_NTLM_CHALLENGE_MESSAGE(auth_header_value[5:])
             user_parts = user.split('\\', 1)
-            DomainName = user_parts[0].upper()
-            UserName = user_parts[1]
+            if len(user_parts) == 1:
+                UserName = user_parts[0]
+                DomainName = ''
+            else:
+                DomainName = user_parts[0].upper()
+                UserName = user_parts[1]
             auth = 'NTLM %s' % ntlm.create_NTLM_AUTHENTICATE_MESSAGE(ServerChallenge, UserName, DomainName, pw, NegotiateFlags)
             headers[self.auth_header] = auth
             headers["Connection"] = "Close"
