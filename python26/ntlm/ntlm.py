@@ -227,20 +227,21 @@ def parse_NTLM_CHALLENGE_MESSAGE(msg2):
     NegotiateFlags = struct.unpack("<I",msg2[20:24])[0]
     ServerChallenge = msg2[24:32]
     Reserved = msg2[32:40]
-    TargetInfoLen = struct.unpack("<H",msg2[40:42])[0]
-    TargetInfoMaxLen = struct.unpack("<H",msg2[42:44])[0]
-    TargetInfoOffset = struct.unpack("<I",msg2[44:48])[0]
-    TargetInfo = msg2[TargetInfoOffset:TargetInfoOffset+TargetInfoLen]
-    i=0
-    TimeStamp = '\0'*8
-    while(i<TargetInfoLen):
-        AvId = struct.unpack("<H",TargetInfo[i:i+2])[0]
-        AvLen = struct.unpack("<H",TargetInfo[i+2:i+4])[0]
-        AvValue = TargetInfo[i+4:i+4+AvLen]
-        i = i+4+AvLen
-        if AvId == NTLM_MsvAvTimestamp:
-            TimeStamp = AvValue 
-        #~ print AvId, AvValue.decode('utf-16')
+    if NegotiateFlags & NTLM_NegotiateTargetInfo:
+        TargetInfoLen = struct.unpack("<H",msg2[40:42])[0]
+        TargetInfoMaxLen = struct.unpack("<H",msg2[42:44])[0]
+        TargetInfoOffset = struct.unpack("<I",msg2[44:48])[0]
+        TargetInfo = msg2[TargetInfoOffset:TargetInfoOffset+TargetInfoLen]
+        i=0
+        TimeStamp = '\0'*8
+        while(i<TargetInfoLen):
+            AvId = struct.unpack("<H",TargetInfo[i:i+2])[0]
+            AvLen = struct.unpack("<H",TargetInfo[i+2:i+4])[0]
+            AvValue = TargetInfo[i+4:i+4+AvLen]
+            i = i+4+AvLen
+            if AvId == NTLM_MsvAvTimestamp:
+                TimeStamp = AvValue 
+            #~ print AvId, AvValue.decode('utf-16')
     return (ServerChallenge, NegotiateFlags)
 
 def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFlags):
