@@ -59,7 +59,7 @@ NTLM_NegotiateKeyExchange            =  0x40000000
 NTLM_Negotiate56                     =  0x80000000
 
 # we send these flags with our ttype 1 message
-NTLM_ttype1_FLAGS = (NTLM_NegotiateUnicode | \
+NTLM_TYPE1_FLAGS = (NTLM_NegotiateUnicode | \
                     NTLM_NegotiateOEM | \
                     NTLM_RequestTarget | \
                     NTLM_NegotiateNTLM | \
@@ -70,7 +70,7 @@ NTLM_ttype1_FLAGS = (NTLM_NegotiateUnicode | \
                     NTLM_NegotiateVersion | \
                     NTLM_Negotiate128 | \
                     NTLM_Negotiate56 )
-NTLM_ttype2_FLAGS = (NTLM_NegotiateUnicode | \
+NTLM_TYPE2_FLAGS = (NTLM_NegotiateUnicode | \
                     NTLM_RequestTarget | \
                     NTLM_NegotiateNTLM | \
                     NTLM_NegotiateAlwaysSign | \
@@ -176,14 +176,14 @@ def dump_NegotiateFlags(NegotiateFlags):
     if NegotiateFlags & NTLM_Negotiate56:
         print("NTLM_Negotiate56 set")                    
 
-def create_NTLM_NEGOTIATE_MESSAGE(user):
+def create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags=NTLM_TYPE1_FLAGS):
     BODY_LENGTH = 40
     Payload_start = BODY_LENGTH # in bytes
     protocol = b'NTLMSSP\0'    #name        
     
     ttype = struct.pack('<I',1) #ttype 1
     
-    flags =  struct.pack('<I', NTLM_ttype1_FLAGS)
+    flags =  struct.pack('<I', type1_flags)
     Workstation = bytes(gethostname().upper(), 'ascii')
     user_parts = user.split('\\', 1)
     DomainName = bytes(user_parts[0].upper(), 'ascii')
@@ -252,7 +252,7 @@ def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFla
     is_unicode  = NegotiateFlags & NTLM_NegotiateUnicode
     is_NegotiateExtendedSecurity = NegotiateFlags & NTLM_NegotiateExtendedSecurity
     
-    flags =  struct.pack('<I',NTLM_ttype2_FLAGS)
+    flags =  struct.pack('<I',NTLM_TYPE2_FLAGS)
 
     BODY_LENGTH = 72
     Payload_start = BODY_LENGTH # in bytes
