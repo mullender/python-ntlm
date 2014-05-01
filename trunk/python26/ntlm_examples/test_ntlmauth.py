@@ -5,9 +5,18 @@ Demonstrate various defects (or their repair!) in the ntml module.
 
 from StringIO import StringIO
 import httplib
-import urllib2
-from ntlm import HTTPNtlmAuthHandler
+import inspect, os, sys
 import traceback
+import urllib2
+try:
+    from ntlm import HTTPNtlmAuthHandler
+except ImportError:
+    # assume ntlm is in the directory "next door"
+    ntlm_folder = os.path.realpath(os.path.join(
+        os.path.dirname(inspect.getfile(inspect.currentframe())),
+        '..'))
+    sys.path.insert(0, ntlm_folder)
+    from ntlm import HTTPNtlmAuthHandler
 
 
 # The headers seen during an initial NTML rejection.
@@ -33,7 +42,7 @@ Hello, world!'''
 
 # A collection of transactions representing various defects in NTLM
 # processing. Each is indexed according the the issues number recorded
-# for the defect at github.  Each consists of a series of server
+# for the defect at code.google.com, and consists of a series of server
 # responses that should be seen as a connection is attempted.
 issues = {
     27: [
@@ -132,7 +141,7 @@ def process(*issue_nbrs):
     # The following is a massive kludge; let me explain why it is needed.
     HTTPNtlmAuthHandler.httplib.HTTPConnection = FakeHTTPConnection
     # At the heart of the urllib2 module is the opener director. Whenever a
-    # URL is opened, the director Is responsible for locating the proper
+    # URL is opened, the director is responsible for locating the proper
     # handler for the protocol specified in the URL. Frequently, an existing
     # protocol handler will be subclassed and then added to the collection
     # maintained by the director. When urlopen is called, the specified
@@ -167,7 +176,7 @@ def process(*issue_nbrs):
             print f.read()
 
 
-# The following is copied from Guido van van Rossum's suggestion.
+# The following is adapted from Guido van van Rossum's suggestion.
 # http://www.artima.com/weblogs/viewpost.jsp?thread=4829
 
 import sys
@@ -178,6 +187,7 @@ class Usage(Exception):
         self.msg = msg
 
 def main(argv=None):
+    """Usage:  %s"""
     if argv is None:
         argv = sys.argv
     try:
@@ -185,11 +195,17 @@ def main(argv=None):
             opts, args = getopt.getopt(argv[1:], "h", ["help"])
         except getopt.error, msg:
              raise Usage(msg)
+        if opts:
+            raise Usage(main.func_doc)
+        if len(args) > 0:
+            raise Usage('takes no arguments (%d given)' % len(args))
         process(*args)
     except Usage, err:
         print >>sys.stderr, err.msg
-        print >>sys.stderr, "for help use --help"
+        if err.msg is not main.func_doc:
+            print >>sys.stderr, "for help use --help"
         return 2
+main.func_doc %= os.path.basename(sys.argv[0])
 
 if __name__ == "__main__":
     sys.exit(main())
