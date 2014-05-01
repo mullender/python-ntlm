@@ -18,6 +18,7 @@ try:
     from . import ntlm
 except ValueError:
     import ntlm
+import re
 
 class AbstractNtlmAuthHandler:
     
@@ -77,6 +78,13 @@ class AbstractNtlmAuthHandler:
                 pass
             r.fp = None # remove the reference to the socket, so that it can not be closed by the response object (we want to keep the socket open)
             auth_header_value = r.getheader(auth_header_field, None)
+
+            # some Exchange servers send two WWW-Authenticate headers, one with the NTLM challenge
+            # and another with the 'Negotiate' keyword - make sure we operate on the right one
+            m = re.match('(NTLM [A-Za-z0-9+\-/=]+)', auth_header_value)
+            if m:
+                auth_header_value, = m.groups()
+
             (ServerChallenge, NegotiateFlags) = ntlm.parse_NTLM_CHALLENGE_MESSAGE(auth_header_value[5:])
             auth = 'NTLM %s' % ntlm.create_NTLM_AUTHENTICATE_MESSAGE(ServerChallenge, UserName, DomainName, pw, NegotiateFlags)
             headers[self.auth_header] = auth
