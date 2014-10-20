@@ -29,8 +29,10 @@ setup(name='python-ntlm',
       packages=["ntlm",],
       zip_safe=False,
       entry_points = ENTRY_POINTS,
+      license="GNU Lesser GPL",
       # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
       classifiers=[
+          "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)"
           # Specify the Python versions you support here. In particular, ensure
           # that you indicate whether you support Python 2, Python 3 or both.
           'Programming Language :: Python :: 2',
