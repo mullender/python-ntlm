@@ -55,7 +55,7 @@ class AbstractNtlmAuthHandler:
                 return None
             headers[self.auth_header] = auth
             
-            host = req.get_host()
+            host = req.host
             if not host:
                 raise urllib.request.URLError('no host given')
             h = None
@@ -66,7 +66,7 @@ class AbstractNtlmAuthHandler:
             # we must keep the connection because NTLM authenticates the connection, not single requests
             headers["Connection"] = "Keep-Alive"
             headers = dict((name.title(), val) for name, val in list(headers.items()))
-            h.request(req.get_method(), req.get_selector(), req.data, headers)
+            h.request(req.get_method(), req.selector, req.data, headers)
             r = h.getresponse()
             r.begin()
             r._safe_read(int(r.getheader('content-length')))
@@ -91,7 +91,7 @@ class AbstractNtlmAuthHandler:
             headers["Connection"] = "Close"
             headers = dict((name.title(), val) for name, val in list(headers.items()))
             try:
-                h.request(req.get_method(), req.get_selector(), req.data, headers)
+                h.request(req.get_method(), req.selector, req.data, headers)
                 # none of the configured handlers are triggered, for example redirect-responses are not handled!
                 response = h.getresponse()
                 def notimplemented():
