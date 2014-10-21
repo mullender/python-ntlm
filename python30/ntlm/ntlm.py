@@ -41,9 +41,9 @@ NTLM_NegotiateOemDomainSupplied      =  0x00001000
 NTLM_NegotiateOemWorkstationSupplied =  0x00002000
 NTLM_Unknown6                        =  0x00004000
 NTLM_NegotiateAlwaysSign             =  0x00008000
-NTLM_TargetttypeDomain                =  0x00010000
-NTLM_TargetttypeServer                =  0x00020000
-NTLM_TargetttypeShare                 =  0x00040000
+NTLM_TargettypeDomain                =  0x00010000
+NTLM_TargettypeServer                =  0x00020000
+NTLM_TargettypeShare                 =  0x00040000
 NTLM_NegotiateExtendedSecurity       =  0x00080000
 NTLM_NegotiateIdentify               =  0x00100000
 NTLM_Unknown5                        =  0x00200000
@@ -58,7 +58,7 @@ NTLM_Negotiate128                    =  0x20000000
 NTLM_NegotiateKeyExchange            =  0x40000000
 NTLM_Negotiate56                     =  0x80000000
 
-# we send these flags with our ttype 1 message
+# we send these flags with our type 1 message
 NTLM_TYPE1_FLAGS = (NTLM_NegotiateUnicode | \
                     NTLM_NegotiateOEM | \
                     NTLM_RequestTarget | \
@@ -80,9 +80,9 @@ NTLM_TYPE2_FLAGS = (NTLM_NegotiateUnicode | \
                     NTLM_Negotiate128 | \
                     NTLM_Negotiate56)
 
-NTLM_MsvAvEOL             = 0 # Indicates that this is the last AV_PAIR in the list. AvLen MUST be 0. This ttype of information MUST be present in the AV pair list.
-NTLM_MsvAvNbComputerName  = 1 # The server's NetBIOS computer name. The name MUST be in Unicode, and is not null-terminated. This ttype of information MUST be present in the AV_pair list.
-NTLM_MsvAvNbDomainName    = 2 # The server's NetBIOS domain name. The name MUST be in Unicode, and is not null-terminated. This ttype of information MUST be present in the AV_pair list.
+NTLM_MsvAvEOL             = 0 # Indicates that this is the last AV_PAIR in the list. AvLen MUST be 0. This type of information MUST be present in the AV pair list.
+NTLM_MsvAvNbComputerName  = 1 # The server's NetBIOS computer name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
+NTLM_MsvAvNbDomainName    = 2 # The server's NetBIOS domain name. The name MUST be in Unicode, and is not null-terminated. This type of information MUST be present in the AV_pair list.
 NTLM_MsvAvDnsComputerName = 3 # The server's Active Directory DNS computer name. The name MUST be in Unicode, and is not null-terminated.
 NTLM_MsvAvDnsDomainName   = 4 # The server's Active Directory DNS domain name. The name MUST be in Unicode, and is not null-terminated.
 NTLM_MsvAvDnsTreeName     = 5 # The server's Active Directory (AD) DNS forest tree name. The name MUST be in Unicode, and is not null-terminated.
@@ -143,12 +143,12 @@ def dump_NegotiateFlags(NegotiateFlags):
         print("NTLM_Unknown6 set")                       
     if NegotiateFlags & NTLM_NegotiateAlwaysSign:
         print("NTLM_NegotiateAlwaysSign set")            
-    if NegotiateFlags & NTLM_TargetttypeDomain:
-        print("NTLM_TargetttypeDomain set")               
-    if NegotiateFlags & NTLM_TargetttypeServer:
-        print("NTLM_TargetttypeServer set")               
-    if NegotiateFlags & NTLM_TargetttypeShare:
-        print("NTLM_TargetttypeShare set")                
+    if NegotiateFlags & NTLM_TargettypeDomain:
+        print("NTLM_TargettypeDomain set")               
+    if NegotiateFlags & NTLM_TargettypeServer:
+        print("NTLM_TargettypeServer set")               
+    if NegotiateFlags & NTLM_TargettypeShare:
+        print("NTLM_TargettypeShare set")                
     if NegotiateFlags & NTLM_NegotiateExtendedSecurity:
         print("NTLM_NegotiateExtendedSecurity set")      
     if NegotiateFlags & NTLM_NegotiateIdentify:
@@ -181,7 +181,7 @@ def create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags=NTLM_TYPE1_FLAGS):
     Payload_start = BODY_LENGTH # in bytes
     protocol = b'NTLMSSP\0'    #name        
     
-    ttype = struct.pack('<I',1) #ttype 1
+    type = struct.pack('<I',1) #ttype 1
     
     flags =  struct.pack('<I', type1_flags)
     Workstation = bytes(gethostname().upper(), 'ascii')
@@ -207,7 +207,7 @@ def create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags=NTLM_TYPE1_FLAGS):
     NTLMRevisionCurrent = struct.pack('<B', 15)
 
     
-    msg1 = protocol + ttype + flags + \
+    msg1 = protocol + type + flags + \
             DomainNameLen + DomainNameMaxLen + DomainNameBufferOffset + \
             WorkstationLen + WorkstationMaxLen + WorkstationBufferOffset + \
             ProductMajorVersion + ProductMinorVersion + ProductBuild + \
@@ -222,8 +222,8 @@ def parse_NTLM_CHALLENGE_MESSAGE(msg2):
     ""
     msg2 = base64.decodestring(bytes(msg2, 'ascii'))
     Signature = msg2[0:8]
-    msg_ttype = struct.unpack("<I",msg2[8:12])[0]
-    assert(msg_ttype==2)
+    msg_type = struct.unpack("<I",msg2[8:12])[0]
+    assert(msg_type==2)
     TargetNameLen = struct.unpack("<H",msg2[12:14])[0]
     TargetNameMaxLen = struct.unpack("<H",msg2[14:16])[0]
     TargetNameOffset = struct.unpack("<I",msg2[16:20])[0]
@@ -277,7 +277,7 @@ def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFla
            ClientChallenge+= bytes((random.getrandbits(8),))
         (NtChallengeResponse, LmChallengeResponse) = ntlm2sr_calc_resp(pwhash, nonce, ClientChallenge) #='\x39 e3 f4 cd 59 c5 d8 60')
     Signature = b'NTLMSSP\0'           
-    Messagettype = struct.pack('<I',3)  #ttype 3
+    Messagetype = struct.pack('<I',3)  #type 3
     
     DomainNameLen = struct.pack('<H', len(DomainName))
     DomainNameMaxLen = struct.pack('<H', len(DomainName))
@@ -320,7 +320,7 @@ def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFla
     NTLMRevisionCurrent = struct.pack('<B', 15)
     
     MIC = struct.pack('<IIII',0,0,0,0)
-    msg3 = Signature + Messagettype + \
+    msg3 = Signature + Messagetype + \
             LmChallengeResponseLen + LmChallengeResponseMaxLen + LmChallengeResponseOffset + \
             NtChallengeResponseLen + NtChallengeResponseMaxLen + NtChallengeResponseOffset + \
             DomainNameLen + DomainNameMaxLen + DomainNameOffset + \
@@ -338,11 +338,11 @@ def create_NTLM_AUTHENTICATE_MESSAGE(nonce, user, domain, password, NegotiateFla
             
 def calc_resp(password_hash, server_challenge):
     """calc_resp generates the LM response given a 16-byte password hash and the
-        challenge from the ttype-2 message.
+        challenge from the type-2 message.
         @param password_hash
             16-byte password hash
         @param server_challenge
-            8-byte challenge from ttype-2 message
+            8-byte challenge from type-2 message
         returns
             24-byte buffer to contain the LM response upon return
     """
