@@ -181,7 +181,7 @@ def create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags=NTLM_TYPE1_FLAGS):
     Payload_start = BODY_LENGTH # in bytes
     protocol = b'NTLMSSP\0'    #name        
     
-    type = struct.pack('<I',1) #ttype 1
+    type = struct.pack('<I',1) #type 1
     
     flags =  struct.pack('<I', type1_flags)
     Workstation = bytes(gethostname().upper(), 'ascii')
