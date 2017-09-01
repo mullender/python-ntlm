@@ -9,7 +9,7 @@ ENTRY_POINTS = { "console_scripts":[ "ntlm_example_simple=ntlm_examples.simple:m
 
 setup(name='python-ntlm',
       version='1.1.0',
-      description='Python library that provides NTLM support, including an authentication handler for urllib2. Works with pass-the-hash in additon to password authentication.',
+      description='Python library that provides NTLM support, including an authentication handler for urllib2. Works with pass-the-hash in addition to password authentication.',
       long_description="""
       This package allows Python clients running on any operating
       system to provide NTLM authentication to a supporting server.
