@@ -52,7 +52,7 @@ class AbstractNtlmAuthHandler:
             headers.update(req.unredirected_hdrs)
             auth = 'NTLM %s' % ntlm.create_NTLM_NEGOTIATE_MESSAGE(
                 user, type1_flags
-            ).decode('ascii')
+            )
             if req.headers.get(self.auth_header, None) == auth:
                 return None
             headers[self.auth_header] = auth
@@ -90,7 +90,7 @@ class AbstractNtlmAuthHandler:
             (ServerChallenge, NegotiateFlags) = ntlm.parse_NTLM_CHALLENGE_MESSAGE(auth_header_value[5:])
             auth = 'NTLM %s' % ntlm.create_NTLM_AUTHENTICATE_MESSAGE(
                 ServerChallenge, UserName, DomainName, pw, NegotiateFlags
-            ).decode('ascii')
+            )
             headers[self.auth_header] = auth
             headers["Connection"] = "Close"
             headers = dict((name.title(), val) for name, val in list(headers.items()))
