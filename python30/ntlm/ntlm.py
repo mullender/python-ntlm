@@ -220,7 +220,7 @@ def create_NTLM_NEGOTIATE_MESSAGE(user, type1_flags=NTLM_TYPE1_FLAGS):
     
 def parse_NTLM_CHALLENGE_MESSAGE(msg2):
     ""
-    msg2 = base64.decodestring(bytes(msg2, 'ascii'))
+    msg2 = base64.decodebytes(bytes(msg2, 'ascii'))
     Signature = msg2[0:8]
     msg_type = struct.unpack("<I",msg2[8:12])[0]
     assert(msg_type==2)
